@@ -19,7 +19,7 @@ Before you begin:
   2a. Don't know what your namespace is? Run ```oci os ns get```
   2b. Don't have the OCI CLI installed? [See](https://docs.cloud.oracle.com/en-us/iaas/Content/API/SDKDocs/cliinstall.htm) to install it.
 3. Customize ```csv_to_parquet.py``` with your own processing logic.
-  3a. If you don't customize the script, the application will compute the number of distinct values of each column.
+   * If you don't customize the script, the application will compute the number of distinct values of each column.
 4. Customize ```csv_to_parquet.py``` with the OCI path where you would like to save output data.
 5. Recommended: run the sample locally to test it.
 6. Upload ```csv_to_parquet.py``` to an object store bucket.
