@@ -20,7 +20,7 @@ Data Flow is a cloud-based serverless platform with a rich user interface. It al
 
 ## Before you Begin
 
-* You must have Set Up Your Tenancy and be able to Access Data Flow
+You must have Set Up Your Tenancy and be able to Access Data Flow
 
   * Setup Tenancy : Before Data Flow can run, you must grant permissions that allow effective log capture and run management. See the [Set Up Administration](https://docs.oracle.com/iaas/data-flow/using/dfs_getting_started.htm#set_up_admin) section of Data Flow Service Guide, and follow the instructions given there.  
   * Access Data Flow : Refer to this section on how to [Access Data Flow](https://docs.oracle.com/en-us/iaas/data-flow/data-flow-tutorial/getting-started/dfs_tut_get_started.htm#access_ui)
@@ -32,14 +32,11 @@ Data Flow is a cloud-based serverless platform with a rich user interface. It al
 | CSV to Parquet    |This application shows how to use PySpark to convert CSV data store in OCI Object Store to Apache Parquet format which is then written back to Object Store.              |[sample](./python/csv_to_parquet)|
 | Load to ADW       |This application shows how to read a file from OCI Object Store, perform some transformation and write the results to an Autonomous Data Warehouse instance.              |[sample](./python/loadadw)|
 
-For step-by-step instructions, see the README files included with
-each sample.
+For step-by-step instructions, see the README files included with each sample.
 
 ## Running the Samples
 
-These samples show how to use the OCI Data Flow service and are meant
-to be deployed to and run from Oracle Cloud. You can optionally test
-these applications locally before you deploy them.  When they are ready, you can deploy them to Data Flow without any need to reconfigure them, make code changes, or apply deployment profiles.To test these applications locally, Apache Spark needs to be installed. Refer to section on how to set the Prerequisites before you deploy the application locally [Setup locally](https://docs.oracle.com/en-us/iaas/data-flow/data-flow-tutorial/develop-apps-locally/front.htm).
+These samples show how to use the OCI Data Flow service and are meant to be deployed to and run from Oracle Cloud. You can optionally test these applications locally before you deploy them.  When they are ready, you can deploy them to Data Flow without any need to reconfigure them, make code changes, or apply deployment profiles.To test these applications locally, Apache Spark needs to be installed. Refer to section on how to set the Prerequisites before you deploy the application locally [Setup locally](https://docs.oracle.com/en-us/iaas/data-flow/data-flow-tutorial/develop-apps-locally/front.htm).
 
 ## Install Spark
 
@@ -48,15 +45,17 @@ and pick the installation path that best suits your environment.
 
 ## Documentation
 
-You can find the online documentation for OCI Data Flow at [docs.oracle.com](https://docs.oracle.com/en-us/iaas/data-flow/using/dfs_getting_started.htm).
+You can find the online documentation for Oracle Cloud Infrastructure Data Flow at [docs.oracle.com](https://docs.oracle.com/en-us/iaas/data-flow/using/dfs_getting_started.htm).
 
 ## Security
 
-See [Security](./SECURITY.md)
+Please consult the [security guide](./SECURITY.md) for our responsible security
+vulnerability disclosure process.
 
 ## Contributing
 
-See [CONTRIBUTING](./CONTRIBUTING.md)
+This project welcomes contributions from the community. Before submitting a pull
+request, please [review our contribution guide](./CONTRIBUTING.md).
 
 ## License
 
