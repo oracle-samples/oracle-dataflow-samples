@@ -22,7 +22,7 @@ Data Flow is a cloud-based serverless platform with a rich user interface. It al
 
 * You must have Set Up Your Tenancy and be able to Access Data Flow
 
-  * Setup Tenancy : Before Data Flow can run, you must grant permissions that allow effective log capture and run management. See the Set Up Administration[Set Up Administration](https://docs.oracle.com/iaas/data-flow/using/dfs_getting_started.htm#set_up_admin) section of Data Flow Service Guide, and follow the instructions given there.  
+  * Setup Tenancy : Before Data Flow can run, you must grant permissions that allow effective log capture and run management. See the [Set Up Administration](https://docs.oracle.com/iaas/data-flow/using/dfs_getting_started.htm#set_up_admin) section of Data Flow Service Guide, and follow the instructions given there.  
   * Access Data Flow : Refer to this section on how to [Access Data Flow](https://docs.oracle.com/en-us/iaas/data-flow/data-flow-tutorial/getting-started/dfs_tut_get_started.htm#access_ui)
 
 ## Sample Examples

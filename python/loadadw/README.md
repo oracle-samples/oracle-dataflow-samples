@@ -40,7 +40,7 @@ Customize ```loadadw.py``` with:
 ## Packaging your Application
 
 * Create the Data Flow Dependencies Archive as follows:
-  
+
 ```bash
    docker pull phx.ocir.io/oracle/dataflow/dependency-packager:latest
    docker run --rm -v $(pwd):/opt/dataflow -it phx.ocir.io/oracle/dataflow/dependency-packager:latest
