@@ -4,7 +4,7 @@ This repository provides examples demonstrating how to use Oracle Cloud Infrastr
 
 ## What is Oracle Cloud Infrastructure Data Flow
 
-Data Flow is a cloud-based serverless platform with a rich user interface. It allows Spark developers and data scientists to create, edit, and run Spark jobs at any scale without the need for clusters, an operations team, or highly specialized Spark knowledge. Being serverless means there is no infrastructure for you to deploy or manage. It is entirely driven by REST APIs, giving you easy integration with applications or workflows. You can:
+Oracle Cloud Infrastructure (OCI) Data Flow is a cloud-based serverless platform with a rich user interface. It allows Spark developers and data scientists to create, edit, and run Spark jobs at any scale without the need for clusters, an operations team, or highly specialized Spark knowledge. Being serverless means there is no infrastructure for you to deploy or manage. It is entirely driven by REST APIs, giving you easy integration with applications or workflows. You can:
 
 * Connect to Apache Spark data sources.
 
@@ -22,8 +22,8 @@ Data Flow is a cloud-based serverless platform with a rich user interface. It al
 
 You must have Set Up Your Tenancy and be able to Access Data Flow
 
-  * Setup Tenancy : Before Data Flow can run, you must grant permissions that allow effective log capture and run management. See the [Set Up Administration](https://docs.oracle.com/iaas/data-flow/using/dfs_getting_started.htm#set_up_admin) section of Data Flow Service Guide, and follow the instructions given there.  
-  * Access Data Flow : Refer to this section on how to [Access Data Flow](https://docs.oracle.com/en-us/iaas/data-flow/data-flow-tutorial/getting-started/dfs_tut_get_started.htm#access_ui)
+    * Setup Tenancy : Before Data Flow can run, you must grant permissions that allow effective log capture and run management. See the [Set Up Administration](https://docs.oracle.com/iaas/data-flow/using/dfs_getting_started.htm#set_up_admin) section of Data Flow Service Guide, and follow the instructions given there.  
+    * Access Data Flow : Refer to this section on how to [Access Data Flow](https://docs.oracle.com/en-us/iaas/data-flow/data-flow-tutorial/getting-started/dfs_tut_get_started.htm#access_ui)
 
 ## Sample Examples
 
@@ -46,6 +46,11 @@ and pick the installation path that best suits your environment.
 ## Documentation
 
 You can find the online documentation for Oracle Cloud Infrastructure Data Flow at [docs.oracle.com](https://docs.oracle.com/en-us/iaas/data-flow/using/dfs_getting_started.htm).
+
+## Get Support
+
+* Open a [GitHub issue](https://github.com/oracle/oracle-dataflow-samples/issues) for bug reports, questions, or requests for enhancements.
+* Post your question on the [OCI Data flow Community](https://community.oracle.com/community/groundbreakers/database/nosql_database).
 
 ## Security
 
