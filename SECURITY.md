@@ -19,13 +19,12 @@ security features are welcome on GitHub Issues.
 
 ## Security updates, alerts and bulletins
 
-Security updates will be released on a regular cadence. Many of our projects
-will typically release security fixes in conjunction with the
-[Oracle Critical Patch Update][3] program. Security updates are released on the
-Tuesday closest to the 17th day of January, April, July and October. A pre-release
-announcement will be published on the Thursday preceding each release. Additional
-information, including past advisories, is available on our [security alerts][3]
-page.
+The Oracle Cloud operations and security teams regularly evaluate Oracle’s Critical
+Patch Updates and Security Alert fixes as well as relevant third-party fixes as they
+become available and apply the relevant patches in accordance with applicable
+change management processes. Customers requiring additional information that is not
+addressed in the Critical Patch Update Advisory may obtain additional information
+should submit a SR within their designated support system
 
 ## Security-related information
 
