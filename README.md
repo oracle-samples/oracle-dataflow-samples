@@ -31,6 +31,7 @@ You must have Set Up Your Tenancy and be able to Access Data Flow
 |-------------------|:-----------:|:------:|
 | CSV to Parquet    |This application shows how to use PySpark to convert CSV data store in OCI Object Store to Apache Parquet format which is then written back to Object Store.              |[CSV to Parquet](./python/csv_to_parquet)|
 | Load to ADW       |This application shows how to read a file from OCI Object Store, perform some transformation and write the results to an Autonomous Data Warehouse instance.              |[Load to ADW](./python/loadadw)|
+| Randmom Forest Regression       |This application shows how to build a model and make prediction using Random Forest Regression.                                                             |[Randmom Forest Regression](./python/random_forest_regression)|
 
 For step-by-step instructions, see the README files included with each sample.
 
