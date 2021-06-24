@@ -167,6 +167,7 @@ def get_delegation_token_path(spark):
     token_path = spark.sparkContext.getConf().get(token_key)
     if not token_path:
         raise Exception(f"{token_key} is not set")
+    return token_path    
 
 def get_temporary_directory():
     if in_dataflow():
