@@ -15,41 +15,44 @@ Before you begin:
 
 ## Instructions
 
-1. Upload a sample CSV file to object store
-2. Customize csv_to_parquet.py with the OCI path to your CSV data. The format is ```oci://<bucket>@<namespace>/path```
-  2a. Don't know what your namespace is? Run ```oci os ns get```
-  2b. Don't have the OCI CLI installed? [See](https://docs.cloud.oracle.com/en-us/iaas/Content/API/SDKDocs/cliinstall.htm) to install it.
-3. Customize ```csv_to_parquet.py``` with your own processing logic.
-   * If you don't customize the script, the application will compute the number of distinct values of each column.
-4. Customize ```csv_to_parquet.py``` with the OCI path where you would like to save output data.
-5. Recommended: run the sample locally to test it.
-6. Upload ```csv_to_parquet.py``` to an object store bucket.
-7. Create a Python Data Flow application pointing to ```csv_to_parquet.py```
-  7a. Refer [here](https://docs.cloud.oracle.com/en-us/iaas/data-flow/using/dfs_data_flow_library.htm#create_pyspark_app)
+1. Upload a sample CSV file of your choice to object store.
+2. Upload ```csv_to_parquet.py``` to object store.
+3. Create a Python Data Flow Application pointing to ```csv_to_parquet.py```
+  3a. Refer [here](https://docs.cloud.oracle.com/en-us/iaas/data-flow/using/dfs_data_flow_library.htm#create_pyspark_app)
+  3b. The Spark application requires two arguments: --input-path and --output-path. These must be OCI HDFS URIs pointing to your source CSV file and target output path. Put these in the Arguments field of the Data Flow Application.
+  3c. Example Arguments field: "--input-path oci://sample@namespace/input.csv --output-path oci://sample@namespace/output.parquet"
 
 ## To use OCI CLI to run the PySpark Application
 
-Create a bucket. Alternatively you can re-use an existing bucket.
+Set all these variables based on your OCI tenancy.
 
 ```sh
-oci os bucket create --name <bucket> --compartment-id <compartment_ocid>
-oci os object put --bucket-name <bucket> --file csv_to_parquet.py
-oci data-flow application create \
-    --compartment-id <compartment_ocid> \
-    --display-name "PySpark Object to Object" \
-    --driver-shape VM.Standard2.1 \
-    --executor-shape VM.Standard2.1 \
-    --num-executors 1 \
-    --spark-version 2.4.4 \
-    --file-uri oci://<bucket>@<namespace>/csv_to_parquet.py \
-    --language Python
+COMPARTMENT_ID=ocid1.compartment.oc1..<your_compartment_id>
+NAMESPACE=my_object_storage_namespace
+BUCKET=my_bucket
+INPUT_PATH=oci://$BUCKET@$NAMESPACE/my_csv_file.csv
+OUTPUT_PATH=oci://$BUCKET@$NAMESPACE/output_parquet
 ```
 
-Make note of the Application ID produced.
+Run these commands to upload all files.
 
 ```sh
-oci data-flow run create \
-    --compartment-id <compartment_ocid> \
-    --application-id <application_ocid> \
-    --display-name 'PySpark Object to Object"
+oci os bucket create --name $BUCKET --compartment-id $COMPARTMENT_ID
+oci os object put --bucket-name $BUCKET --file my_csv_file.csv
+oci os object put --bucket-name $BUCKET --file csv_to_parquet.py
+```
+
+Launch the Spark application to convert CSV to Parquet.
+
+```sh
+oci data-flow run submit \
+    --compartment-id $COMPARTMENT_ID \
+    --display-name "PySpark Convert CSV to Parquet" \
+    --execute "oci://$BUCKET@$NAMESPACE/csv_to_parquet.py --input-path $INPUT_PATH --output-path $OUTPUT_PATH"
+```
+
+Make note of "id" field this command returns. When the job is finished, view its output using:
+
+```sh
+oci data-flow run get-log --run-id <run_id> --name spark_application_stdout.log.gz --file -
 ```
