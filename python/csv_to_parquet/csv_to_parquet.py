@@ -2,6 +2,7 @@
 # Copyright © 2021, Oracle and/or its affiliates. 
 # The Universal Permissive License (UPL), Version 1.0 as shown at https://oss.oracle.com/licenses/upl.
 
+import argparse
 import os
 
 from pyspark import SparkConf
@@ -9,20 +10,23 @@ from pyspark.sql import SparkSession, SQLContext
 
 
 def main():
-    # TODO: Set input and output paths.
-    INPUT_PATH = "oci://<bucket>@<namespace>/<your_remote_path.csv>"
-    OUTPUT_PATH = "oci://<bucket>@<namespace>/<your_remote_output>"
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input-path", required=True)
+    parser.add_argument("--output-path", required=True)
+    args = parser.parse_args()
 
     # Set up Spark.
     spark_session = get_dataflow_spark_session()
     sql_context = SQLContext(spark_session)
 
     # Load our data.
-    input_dataframe = sql_context.read.option("header", "true").csv(INPUT_PATH)
+    input_dataframe = sql_context.read.option("header", "true").csv(args.input_path)
 
     # Save the results as Parquet.
-    input_dataframe.write.mode("overwrite").parquet(OUTPUT_PATH)
+    input_dataframe.write.mode("overwrite").parquet(args.output_path)
 
+    # Show on the console that something happened.
+    print("Successfully converted {} rows to Parquet and wrote to {}.".format(input_dataframe.count(), args.output_path))
 
 def get_dataflow_spark_session(
     app_name="DataFlow", file_location=None, profile_name=None, spark_config={}
