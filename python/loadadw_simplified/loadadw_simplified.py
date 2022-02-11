@@ -13,7 +13,7 @@ def oracle_datasource_auto_connect_example(spark):
 
     # Write
     src_df.write.format("oracle") \
-        .option("dbtable",TARGET_TABLE).options(**properties).save()
+        .options(**properties).option("dbtable",TARGET_TABLE).save()
 
 if __name__ == "__main__":
     spark = SparkSession.builder.appName("Python Spark Oracle Datasource Example").getOrCreate()
