@@ -21,6 +21,15 @@ Customize ```loadadw_simplified.py``` with:
 * Set SRC_TABLE source autonomous table name.
 * Set TARGET_TABLE target autonomous table name.
 
+Customize ```loadadw_with_wallet_objectstorage.py``` with:
+
+* Set WALLET_URI wallet zip file object storage or hdfs compatible location.
+* Set USER to the user who generated the wallet file.
+* Set PASSWORD password to the database.
+* Set SRC_TABLE source autonomous table name.
+* Set TARGET_TABLE target autonomous table name.
+
+
 ## Packaging your Application
 
 No additional packages required for this example.
@@ -37,7 +46,8 @@ No additional packages required for this example.
 Create a bucket. Alternatively you can re-use an existing bucket.
 
 ```sh
-oci os object put --bucket-name <bucket> --file loadadw_simplified.py
+spark_application = loadadw_simplified.py # replace with ```loadadw_with_wallet_objectstorage.py``` if required
+oci os object put --bucket-name <bucket> --file ${spark_application}
 oci data-flow application create \
     --compartment-id <compartment_ocid> \
     --display-name "PySpark Load ADW Simplified" \
@@ -45,7 +55,7 @@ oci data-flow application create \
     --executor-shape VM.Standard2.1 \
     --num-executors 1 \
     --spark-version 3.0.2 \
-    --file-uri oci://<bucket>@<namespace>/loadadw_simplified.py \
+    --file-uri oci://<bucket>@<namespace>/${spark_application} \
     --language Python
 oci data-flow run create \
     --application-id <application_ocid> \
@@ -53,3 +63,4 @@ oci data-flow run create \
     --application-id <application_ocid> \
     --display-name 'PySpark Load ADW Simplified"
 ```
+
