@@ -7,11 +7,11 @@ from pyspark.sql import SparkSession
 def oracle_datasource_auto_connect_example(spark):
     properties = {"adbId": ADB_ID, "user": USER, "password": PASSWORD}
 
-    # Read
+    # read from autonomous database
     src_df = spark.read.format("oracle") \
         .options(**properties).option("dbtable",SRC_TABLE).load()
 
-    # Write
+    # write to autonomous database
     src_df.write.format("oracle") \
         .options(**properties).option("dbtable",TARGET_TABLE).save()
 
