@@ -4,9 +4,6 @@ A simple example demonstrates the usage of oracle datasource.
 
 from pyspark.sql import SparkSession
 
-"""
- Connect autonomous database using autonomous database ocid.
-"""
 def oracle_datasource_auto_connect_example(spark):
     properties = {"adbId": ADB_ID, "user": USER, "password": PASSWORD}
 
