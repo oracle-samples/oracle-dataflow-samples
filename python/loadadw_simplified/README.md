@@ -1,7 +1,7 @@
 # Overview
 
 This example shows you how to read/write from/to ADW/ATP/AJD using oracle datasource.
-This example works only in dataflow, it will not work in local.Please reach out to dataflow team, if you want to try from local.
+This example works only in dataflow, not from local.Please reach out to dataflow service or support, if you want to try from local.
 
 ## Prerequisites
 
