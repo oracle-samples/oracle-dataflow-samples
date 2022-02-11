@@ -1,14 +1,15 @@
 # Overview
 
-This example shows you how to use OCI Data Flow to process data in OCI Object Store and save the results to Oracle ADW or ATP or AJD.
+This example shows you how to read/write from/to ADW/ATP/AJD using oracle datasource.
+This example works only in dataflow, it will not work in local.Please reach out to dataflow team, if you want to try from local.
 
 ## Prerequisites
 
 Before you begin:
 
 1. Ensure your tenant is configured for Data Flow by following [instructions](https://docs.cloud.oracle.com/en-us/iaas/data-flow/using/dfs_getting_started.htm#set_up_admin)
-2. Provision an ADW or ATP or AJD instance.
-
+2. Provision an ADW/ATP/AJD.
+3. Load data into source table.
 
 ## Application Setup
 
@@ -20,10 +21,9 @@ Customize ```loadadw_simplified.py``` with:
 * Set SRC_TABLE source autonomous table name.
 * Set TARGET_TABLE target autonomous table name.
 
-
 ## Packaging your Application
 
-No additional packages required.
+No additional packages required for this example.
 
 ## Deploy and Run the Application
 
@@ -37,8 +37,7 @@ No additional packages required.
 Create a bucket. Alternatively you can re-use an existing bucket.
 
 ```sh
-oci os object put --bucket-name <bucket> --file loadadw.py
-oci os object put --bucket-name <bucket> --file archive.zip
+oci os object put --bucket-name <bucket> --file loadadw_simplified.py
 oci data-flow application create \
     --compartment-id <compartment_ocid> \
     --display-name "PySpark Load ADW Simplified" \
@@ -52,5 +51,5 @@ oci data-flow run create \
     --application-id <application_ocid> \
     --compartment-id <compartment_ocid> \
     --application-id <application_ocid> \
-    --display-name 'PySpark Load ADW"
+    --display-name 'PySpark Load ADW Simplified"
 ```
