@@ -1,13 +1,19 @@
 """
-A simple example demonstrating Oracle Spark data source.
+A simple example demonstrates the usage of oracle datasource.
 """
 
 from pyspark.sql import SparkSession
 
 def oracle_datasource_auto_connect_example(spark):
-    properties = {"adbId": ADB_ID,"user": USER,"password": PASSWORD}
-    src_df = spark.read.format("oracle").options(**properties).option("dbtable",SRC_TABLE).load()
-    src_df.write.format("oracle").option("dbtable",TARGET_TABLE).options(**properties).save()
+    properties = {"adbId": ADB_ID, "user": USER, "password": PASSWORD}
+
+    # Read
+    src_df = spark.read.format("oracle") \
+        .options(**properties).option("dbtable",SRC_TABLE).load()
+
+    # Write
+    src_df.write.format("oracle") \
+        .option("dbtable",TARGET_TABLE).options(**properties).save()
 
 if __name__ == "__main__":
     spark = SparkSession.builder.appName("Python Spark Oracle Datasource Example").getOrCreate()
