@@ -39,9 +39,11 @@ public class DataFlowUtilities {
 			String localConfigurationFilePath, String localProfile) throws IOException {
 		if (DataFlowSparkSession.isRunningInDataFlow()) {
 			// Use our delegation token.
+			System.out.println("InstancePrincipalsAuthenticationDetailsProvider");
 			return InstancePrincipalsAuthenticationDetailsProvider.builder().build();
 		} else {
 			// We are running outside of Data Flow, use our API key.
+			System.out.println("ConfigFileAuthenticationDetailsProvider");
 			return new ConfigFileAuthenticationDetailsProvider(localConfigurationFilePath, localProfile);
 		}
 	}

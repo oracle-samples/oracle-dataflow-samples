@@ -33,15 +33,6 @@ public class DataFlowSparkSession {
 		return getSparkSession(appName, ConfigFileReader.DEFAULT_FILE_PATH, "DEFAULT", null);
 	}
 
-	public static SparkSession getSparkSession(String appName, Map<String, String> conf) throws IOException {
-		return getSparkSession(appName, ConfigFileReader.DEFAULT_FILE_PATH, "DEFAULT", conf);
-	}
-
-	public static SparkSession getSparkSession(String appName, String localConfigurationFilePath,
-			Map<String, String> conf) throws IOException {
-		return getSparkSession(appName, localConfigurationFilePath, "DEFAULT", conf);
-	}
-
 	public static SparkSession getSparkSession(String appName, String localConfigurationFilePath, String localProfile,
 			Map<String, String> conf) throws IOException {
 		Builder builder = SparkSession.builder().appName(appName);
@@ -69,33 +60,5 @@ public class DataFlowSparkSession {
 			}
 		}
 		return builder.getOrCreate();
-	}
-
-	/*
-	 * Get configurations needed to instantiate an authenticated BMC HDFS client.
-	 */
-	public static Configuration getBmcConfiguration(SparkSession spark) throws RuntimeException {
-		SparkConf conf = spark.sparkContext().getConf();
-		Configuration config = new Configuration();
-		List<String> keysToCopy;
-		if (isRunningInDataFlow()) {
-			keysToCopy = Arrays.asList("fs.oci.client.auth.delegationTokenPath", "fs.oci.client.custom.client",
-					"fs.oci.client.custom.authenticator", "fs.oci.client.hostname");
-		} else {
-			keysToCopy = Arrays.asList("fs.oci.client.auth.tenantId", "fs.oci.client.auth.userId",
-					"fs.oci.client.auth.fingerprint", "fs.oci.client.auth.pemfilepath", "fs.oci.client.hostname");
-		}
-		for (String entry : keysToCopy) {
-			String configuration = conf.get(entry, "");
-			if ("".equals(configuration)) {
-				configuration = conf.get("spark.hadoop." + entry, "");
-			}
-			if ("".equals(configuration)) {
-				throw new RuntimeException("Missing configuration " + entry);
-			}
-
-			config.set(entry, configuration);
-		}
-		return config;
 	}
 }

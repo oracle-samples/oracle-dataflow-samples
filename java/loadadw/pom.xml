@@ -3,30 +3,33 @@
 	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
-
 	<groupId>com.example</groupId>
 	<artifactId>loadadw</artifactId>
 	<version>1.0-SNAPSHOT</version>
 
-	<repositories>
-		<repository>
-			<id>project.local</id>
-			<name>project</name>
-			<url>file:${project.basedir}/repo</url>
-		</repository>
-	</repositories>
-
 	<properties>
-		<oci-java-sdk-version>1.15.4</oci-java-sdk-version>
+		<spark.version>3.0.2</spark.version>
+		<maven.compiler.source>1.8</maven.compiler.source>
+		<maven.compiler.target>1.8</maven.compiler.target>
+		<oci-java-sdk-version>2.10.0</oci-java-sdk-version>
 	</properties>
 
 	<dependencies>
-		<!-- For interfacing with OCI -->
 		<dependency>
 			<groupId>com.oracle.oci.sdk</groupId>
-			<artifactId>oci-hdfs-connector</artifactId>
-			<version>2.9.2.6</version>
-			<scope>provided</scope>
+			<artifactId>oci-java-sdk-objectstorage</artifactId>
+			<version>${oci-java-sdk-version}</version>
+		</dependency>
+		<dependency>
+			<groupId>com.oracle.oci.sdk</groupId>
+			<artifactId>oci-java-sdk-addons-sasl</artifactId>
+			<optional>false</optional>
+			<version>${oci-java-sdk-version}</version>
+		</dependency>
+		<dependency>
+			<groupId>com.oracle.oci.sdk</groupId>
+			<artifactId>oci-java-sdk-identity</artifactId>
+			<version>${oci-java-sdk-version}</version>
 		</dependency>
 		<dependency>
 			<groupId>com.oracle.oci.sdk</groupId>
@@ -35,54 +38,35 @@
 		</dependency>
 		<dependency>
 			<groupId>com.oracle.oci.sdk</groupId>
-			<artifactId>oci-java-sdk-objectstorage</artifactId>
+			<artifactId>oci-java-sdk-database</artifactId>
 			<version>${oci-java-sdk-version}</version>
 		</dependency>
 		<dependency>
 			<groupId>com.oracle.oci.sdk</groupId>
-			<artifactId>oci-java-sdk-secrets</artifactId>
+			<artifactId>oci-java-sdk-common</artifactId>
 			<version>${oci-java-sdk-version}</version>
 		</dependency>
-
-		<!-- Spark 2.4.4 -->
+		<dependency>
+			<groupId>com.oracle.oci.sdk</groupId>
+			<artifactId>oci-java-sdk-addons-s2s</artifactId>
+			<version>${oci-java-sdk-version}</version>
+		</dependency>
+		<dependency>
+			<groupId>com.google.protobuf</groupId>
+			<artifactId>protobuf-java</artifactId>
+			<version>3.11.1</version>
+		</dependency>
 		<dependency>
 			<groupId>org.apache.spark</groupId>
 			<artifactId>spark-core_2.12</artifactId>
-			<version>2.4.4</version>
+			<version>${spark.version}</version>
 			<scope>provided</scope>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.spark</groupId>
 			<artifactId>spark-sql_2.12</artifactId>
-			<version>2.4.4</version>
+			<version>${spark.version}</version>
 			<scope>provided</scope>
-		</dependency>
-
-		<!-- Drivers for talking to ADW. Jars need to be deployed using mvn deploy:deploy-file -->
-		<dependency>
-			<groupId>com.oracle</groupId>
-			<artifactId>ojdbc8</artifactId>
-			<version>18.3</version>
-		</dependency>
-		<dependency>
-			<groupId>com.oracle</groupId>
-			<artifactId>ucp</artifactId>
-			<version>18.3</version>
-		</dependency>
-		<dependency>
-			<groupId>com.oracle</groupId>
-			<artifactId>oraclepki</artifactId>
-			<version>18.3</version>
-		</dependency>
-		<dependency>
-			<groupId>com.oracle</groupId>
-			<artifactId>osdt_cert</artifactId>
-			<version>18.3</version>
-		</dependency>
-		<dependency>
-			<groupId>com.oracle</groupId>
-			<artifactId>osdt_core</artifactId>
-			<version>18.3</version>
 		</dependency>
 	</dependencies>
 
@@ -90,31 +74,41 @@
 		<plugins>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-compiler-plugin</artifactId>
-				<version>3.8.0</version>
+				<artifactId>maven-assembly-plugin</artifactId>
 				<configuration>
-					<source>1.8</source>
-					<target>1.8</target>
+					<skipAssembly>false</skipAssembly>
 				</configuration>
 			</plugin>
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-surefire-plugin</artifactId>
-				<version>2.22.0</version>
-			</plugin>
+
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-shade-plugin</artifactId>
-				<version>3.1.1</version>
-				<executions>
-					<execution>
-						<phase>package</phase>
-						<goals>
-							<goal>shade</goal>
-						</goals>
-					</execution>
-				</executions>
+				<version>3.2.4</version>
 				<configuration>
+					<!-- The final uber jar file name will not have a version component. -->
+					<finalName>${project.artifactId}</finalName>
+					<createDependencyReducedPom>false</createDependencyReducedPom>
+					<transformers>
+						<transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+						<transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer"/>
+					</transformers>
+					<relocations>
+							<relocation>
+								<pattern>com.google</pattern>
+								<shadedPattern>shaded.oracle.com.google</shadedPattern>
+							</relocation>
+							<relocation>
+								<pattern>com.oracle.bmc</pattern>
+								<shadedPattern>shaded.com.oracle.bmc</shadedPattern>
+								<includes>
+									<include>com.oracle.bmc.**</include>
+								</includes>
+								<excludes>
+									<exclude>com.oracle.bmc.hdfs.**</exclude>
+								</excludes>
+							</relocation>
+					</relocations>
+					<!-- exclude signed Manifests -->
 					<filters>
 						<filter>
 							<artifact>*:*</artifact>
@@ -125,64 +119,15 @@
 							</excludes>
 						</filter>
 					</filters>
-					<relocations>
-						<relocation>
-							<pattern>org.apache.http</pattern>
-							<shadedPattern>shaded.oracle.org.apache.http</shadedPattern>
-						</relocation>
-						<relocation>
-							<pattern>org.apache.commons</pattern>
-							<shadedPattern>shaded.oracle.org.apache.commons</shadedPattern>
-						</relocation>
-						<relocation>
-							<pattern>com.fasterxml</pattern>
-							<shadedPattern>shaded.oracle.com.fasterxml</shadedPattern>
-						</relocation>
-						<relocation>
-							<pattern>com.google</pattern>
-							<shadedPattern>shaded.oracle.com.google</shadedPattern>
-						</relocation>
-						<relocation>
-							<pattern>javax.ws.rs</pattern>
-							<shadedPattern>shaded.oracle.javax.ws.rs</shadedPattern>
-						</relocation>
-						<relocation>
-							<pattern>org.glassfish</pattern>
-							<shadedPattern>shaded.oracle.org.glassfish</shadedPattern>
-						</relocation>
-						<relocation>
-							<pattern>org.jvnet</pattern>
-							<shadedPattern>shaded.oracle.org.jvnet</shadedPattern>
-						</relocation>
-						<relocation>
-							<pattern>javax.annotation</pattern>
-							<shadedPattern>shaded.oracle.javax.annotation</shadedPattern>
-						</relocation>
-						<relocation>
-							<pattern>javax.validation</pattern>
-							<shadedPattern>shaded.oracle.javax.validation</shadedPattern>
-						</relocation>
-						<relocation>
-							<pattern>com.oracle.bmc</pattern>
-							<shadedPattern>shaded.com.oracle.bmc</shadedPattern>
-							<includes>
-								<include>com.oracle.bmc.**</include>
-							</includes>
-							<excludes>
-								<exclude>com.oracle.bmc.hdfs.**</exclude>
-							</excludes>
-						</relocation>
-					</relocations>
-					<artifactSet>
-						<excludes>
-							<exclude>org.bouncycastle:bcpkix-jdk15on</exclude>
-							<exclude>org.bouncycastle:bcprov-jdk15on</exclude>
-							<!-- Including jsr305 in the shaded jar causes a SecurityException 
-								due to signer mismatch for class "javax.annotation.Nonnull" -->
-							<exclude>com.google.code.findbugs:jsr305</exclude>
-						</excludes>
-					</artifactSet>
 				</configuration>
+				<executions>
+					<execution>
+						<phase>package</phase>
+						<goals>
+							<goal>shade</goal>
+						</goals>
+					</execution>
+				</executions>
 			</plugin>
 		</plugins>
 	</build>
