@@ -13,6 +13,15 @@ Before you begin:
 
 ## Application Setup
 
+Customize ```loadadw_simplified_autologin``` with:
+Note: no username/password required.This requires cwalet.sso to be set with credential for connection.
+For more details, https://docs.oracle.com/cd/B19306_01/network.102/b14266/cnctslsh.htm#CBHBGICA
+
+* Set WALLET_URI wallet zip file object storage or hdfs compatible location.
+* Set SRC_TABLE source autonomous table name.
+* Set TARGET_TABLE target autonomous table name.
+
+
 Customize ```loadadw_simplified.py``` with:
 
 * Set ADB_ID autonomous database OCID.
@@ -28,7 +37,6 @@ Customize ```loadadw_with_wallet_objectstorage.py``` with:
 * Set PASSWORD password to the database.
 * Set SRC_TABLE source autonomous table name.
 * Set TARGET_TABLE target autonomous table name.
-
 
 ## Packaging your Application
 
