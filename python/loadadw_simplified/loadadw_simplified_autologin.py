@@ -26,8 +26,6 @@ if __name__ == "__main__":
 
     # TODO: Set all these variables.
     ADB_ID = "ocid1.autonomousdatabase.<REALM>.[REGION][.FUTURE USE].<UNIQUE ID>"
-    USER = "ADMIN"
-    PASSWORD = "PASSWORD" # This is just an example.Recommend to access password secure way for example oci vault service.
     SRC_TABLE = "SCHEMA.TABLE"
     TARGET_TABLE = "SCHEMA.TABLE"
     CONNECTION_ID = "database_type"
