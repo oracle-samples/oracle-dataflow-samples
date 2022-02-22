@@ -82,13 +82,14 @@ public class Example {
 		properties.put("password",PASSWORD);
 
 		System.out.println("Reading data from autonomous database.");
-				Dataset<Row> src_df = spark
+		Dataset<Row> src_df = spark
 						.read()
 						.format("oracle")
 						.options(properties)
 						.option("adbId",ADB_ID)
 						.option("dbtable",SRC_TABLE)
 						.load();
+
 
 		System.out.println("Writing data to autonomous database.");
 				src_df.write()

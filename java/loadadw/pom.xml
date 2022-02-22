@@ -3,27 +3,31 @@
 	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
-	<groupId>com.example</groupId>
-	<artifactId>loadadw</artifactId>
-	<version>1.0-SNAPSHOT</version>
+
+	<parent>
+		<groupId>com.oracle.pic.commons</groupId>
+		<artifactId>service-pom</artifactId>
+		<version>2.0.3</version>
+	</parent>
+
+	<groupId>com.oracle.csda.metering</groupId>
+	<artifactId>metering-dataflow</artifactId>
+	<version>0.1-SNAPSHOT</version>
 
 	<properties>
-		<spark.version>3.0.2</spark.version>
-		<maven.compiler.source>1.8</maven.compiler.source>
-		<maven.compiler.target>1.8</maven.compiler.target>
+		<enforcer.skip>true</enforcer.skip>
 		<oci-java-sdk-version>2.10.0</oci-java-sdk-version>
 	</properties>
 
 	<dependencies>
 		<dependency>
-			<groupId>com.oracle.oci.sdk</groupId>
-			<artifactId>oci-java-sdk-objectstorage</artifactId>
-			<version>${oci-java-sdk-version}</version>
+			<groupId>org.projectlombok</groupId>
+			<artifactId>lombok</artifactId>
+			<version>1.18.20</version>
 		</dependency>
 		<dependency>
 			<groupId>com.oracle.oci.sdk</groupId>
-			<artifactId>oci-java-sdk-addons-sasl</artifactId>
-			<optional>false</optional>
+			<artifactId>oci-java-sdk-common</artifactId>
 			<version>${oci-java-sdk-version}</version>
 		</dependency>
 		<dependency>
@@ -33,7 +37,7 @@
 		</dependency>
 		<dependency>
 			<groupId>com.oracle.oci.sdk</groupId>
-			<artifactId>oci-java-sdk-core</artifactId>
+			<artifactId>oci-java-sdk-objectstorage</artifactId>
 			<version>${oci-java-sdk-version}</version>
 		</dependency>
 		<dependency>
@@ -43,30 +47,38 @@
 		</dependency>
 		<dependency>
 			<groupId>com.oracle.oci.sdk</groupId>
-			<artifactId>oci-java-sdk-common</artifactId>
-			<version>${oci-java-sdk-version}</version>
-		</dependency>
-		<dependency>
-			<groupId>com.oracle.oci.sdk</groupId>
 			<artifactId>oci-java-sdk-addons-s2s</artifactId>
 			<version>${oci-java-sdk-version}</version>
 		</dependency>
 		<dependency>
-			<groupId>com.google.protobuf</groupId>
-			<artifactId>protobuf-java</artifactId>
-			<version>3.11.1</version>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.spark</groupId>
-			<artifactId>spark-core_2.12</artifactId>
-			<version>${spark.version}</version>
-			<scope>provided</scope>
+			<groupId>net.sourceforge.argparse4j</groupId>
+			<artifactId>argparse4j</artifactId>
+			<version>0.9.0</version>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.spark</groupId>
 			<artifactId>spark-sql_2.12</artifactId>
-			<version>${spark.version}</version>
+			<version>3.0.2</version>
 			<scope>provided</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>com.google.code.findbugs</groupId>
+			<artifactId>annotations</artifactId>
+			<version>3.0.1</version>
+			<scope>compile</scope>
+		</dependency>
+		<dependency>
+			<groupId>com.google.code.findbugs</groupId>
+			<artifactId>jsr305</artifactId>
+			<version>3.0.2</version>
+		</dependency>
+
+		<!--  Test dependencies !-->
+		<dependency>
+			<groupId>junit</groupId>
+			<artifactId>junit</artifactId>
+			<version>4.13.2</version>
 		</dependency>
 	</dependencies>
 
@@ -74,52 +86,8 @@
 		<plugins>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-assembly-plugin</artifactId>
-				<configuration>
-					<skipAssembly>false</skipAssembly>
-				</configuration>
-			</plugin>
-
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-shade-plugin</artifactId>
 				<version>3.2.4</version>
-				<configuration>
-					<!-- The final uber jar file name will not have a version component. -->
-					<finalName>${project.artifactId}</finalName>
-					<createDependencyReducedPom>false</createDependencyReducedPom>
-					<transformers>
-						<transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
-						<transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer"/>
-					</transformers>
-					<relocations>
-							<relocation>
-								<pattern>com.google</pattern>
-								<shadedPattern>shaded.oracle.com.google</shadedPattern>
-							</relocation>
-							<relocation>
-								<pattern>com.oracle.bmc</pattern>
-								<shadedPattern>shaded.com.oracle.bmc</shadedPattern>
-								<includes>
-									<include>com.oracle.bmc.**</include>
-								</includes>
-								<excludes>
-									<exclude>com.oracle.bmc.hdfs.**</exclude>
-								</excludes>
-							</relocation>
-					</relocations>
-					<!-- exclude signed Manifests -->
-					<filters>
-						<filter>
-							<artifact>*:*</artifact>
-							<excludes>
-								<exclude>META-INF/*.SF</exclude>
-								<exclude>META-INF/*.DSA</exclude>
-								<exclude>META-INF/*.RSA</exclude>
-							</excludes>
-						</filter>
-					</filters>
-				</configuration>
 				<executions>
 					<execution>
 						<phase>package</phase>
@@ -128,6 +96,33 @@
 						</goals>
 					</execution>
 				</executions>
+				<configuration>
+					<relocations>
+						<relocation>
+							<pattern>com.google</pattern>
+							<shadedPattern>shaded.oracle.com.google</shadedPattern>
+						</relocation>
+						<relocation>
+							<pattern>com.oracle.bmc</pattern>
+							<shadedPattern>shaded.com.oracle.bmc</shadedPattern>
+							<includes>
+								<include>com.oracle.bmc.**</include>
+							</includes>
+							<excludes>
+								<exclude>com.oracle.bmc.hdfs.**</exclude>
+							</excludes>
+						</relocation>
+					</relocations>
+					<artifactSet>
+						<excludes>
+							<exclude>org.bouncycastle:bcpkix-jdk15on</exclude>
+							<exclude>org.bouncycastle:bcprov-jdk15on</exclude>
+							<!-- Including jsr305 in the shaded jar causes a SecurityException due to signer
+                   mismatch for class "javax.annotation.Nonnull" -->
+							<exclude>com.google.code.findbugs:jsr305</exclude>
+						</excludes>
+					</artifactSet>
+				</configuration>
 			</plugin>
 		</plugins>
 	</build>
