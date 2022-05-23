@@ -1,0 +1,63 @@
+
+//  Train Model
+val survivalModel = new AFTSurvivalRegression()
+.setCensorCol("censor")
+.setFeaturesCol("scaled_features")
+.setLabelCol("rul")
+.setMaxIter(1000)
+val model:AFTSurvivalRegressionModel = survivalModel.fit(trainingData)
+
+
+ // Prediction  RUL
+println("Predicting RUL")
+val featuredData = vectorAssemblerModel.transform(testData)
+val scaledData = scalerModel.transform(featuredData)
+val predictedRULData = survivalModel.transform(scaledData)
+.withColumnRenamed("prediction","predicted_RUL")
+predictedRULData.printSchema()
+predictedRULData.show()
+
+
+-- Todo add Sample Train Data
+
+# Sample Test Data
+{
+  "asset_id":5328,
+  "current_age":9,
+  "setting1":-0.0058808367405927785,
+  "setting2":4.661969861847366,
+  "setting3":100.0,
+  "sensor1":644.0355384671853,
+  "sensor2":642.4800986587113,
+  "sensor3":1595.5333806559183,
+  "sensor4":1422.3502267918361,
+  "sensor5":14.62,
+  "sensor6":21.60898171324386,
+  "sensor7":551.6827053893885,
+  "sensor8":2388.3698143380484,
+  "sensor9":9031.710617870756,
+  "sensor10":1.3,
+  "sensor12":47.23708018336882,
+  "sensor13":522.6362773262626,
+  "sensor14":2387.983546885641,
+  "sensor15":8198.692582467245,
+  "sensor16":8.571904914749434,
+  "sensor17":0.03,
+  "sensor18":396.02192387728894,
+  "sensor19":2388.0,
+  "sensor20":100.0,
+  "sensor21":39.30925010408407,
+  "eventTime":1651260880
+}
+
+-- Spark Ui visual
+
+-- Enable Realtime logging
+
+-- Spark ADW write code
+
+-- ADW UI
+
+
+
+
