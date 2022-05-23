@@ -41,10 +41,10 @@ import oracle.jdbc.OracleConnection;
 
 public class Example {
 	// Customize these before you start.
-	private static String walletPath = "oci://<bucket>@<tenancy>/wallet.zip";
+	private static String walletPath = "oci://siselvan@axmemlgtri2a/adw_datasource_test/Wallet_DB20220519112714.zip";
 	private static String user = "ADMIN";
-	private static String passwordOcid = "ocid1.vaultsecret.oc1.iad.<secret_ocid>";
-	private static String tnsName = "<tnsname>";
+	private static String passwordOcid = "ocid1.vaultsecret.oc1.ca-toronto-1.amaaaaaaep4fdfaa33yhywvra2avsqrnyg2wr3aa44ultzwxasvvxtewvuka";
+	private static String tnsName = "db20220519112714_medium";
 
 	public static void main(String[] args) throws Exception {
 		// Get our Spark session.
@@ -72,6 +72,7 @@ public class Example {
 
 		// Get the password from the secrets service.
 		String tokenPath = DataFlowUtilities.getDelegationTokenPath(spark);
+		System.out.println("DelegationTokenPath:" + tokenPath);
 		AbstractAuthenticationDetailsProvider provider = DataFlowUtilities.getAuthenticationDetailsProvider();
 		ClientConfigurator configurator = DataFlowUtilities.getClientConfigurator(tokenPath);
 		String password = getSecret(tokenPath, passwordOcid, provider, configurator);

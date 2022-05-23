@@ -1,57 +1,502 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-	<modelVersion>4.0.0</modelVersion>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.oracle.cp360Pipeline</groupId>
+  <artifactId>datacollector</artifactId>
+  <packaging>jar</packaging>
+  <version>1.0.0.0-SNAPSHOT</version>
+  <name>cp360Pipeline</name>
+  <url>http://maven.apache.org</url>
 
-	<groupId>com.example</groupId>
-	<artifactId>csv_to_parquet</artifactId>
-	<version>1.0-SNAPSHOT</version>
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <jdk.version>1.8</jdk.version>
+  </properties>
 
-	<properties>
-		<oci-java-sdk-version>1.15.4</oci-java-sdk-version>
-	</properties>
+  <dependencies>
 
-	<dependencies>
-		<!-- For interfacing with OCI -->
-		<dependency>
-			<groupId>com.oracle.oci.sdk</groupId>
-			<artifactId>oci-hdfs-connector</artifactId>
-			<version>2.9.2.6</version>
-			<scope>provided</scope>
-		</dependency>
-		<dependency>
-			<groupId>com.oracle.oci.sdk</groupId>
-			<artifactId>oci-java-sdk-core</artifactId>
-			<version>${oci-java-sdk-version}</version>
-		</dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <version>2.12.3</version>
+    </dependency>
 
-		<!-- Spark 2.4.4 -->
-		<dependency>
-			<groupId>org.apache.spark</groupId>
-			<artifactId>spark-core_2.12</artifactId>
-			<version>2.4.4</version>
-			<scope>provided</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.spark</groupId>
-			<artifactId>spark-sql_2.12</artifactId>
-			<version>2.4.4</version>
-			<scope>provided</scope>
-		</dependency>
-	</dependencies>
+    <dependency>
+      <groupId>org.glassfish.jersey.core</groupId>
+      <artifactId>jersey-common</artifactId>
+      <version>3.0.2</version>
+    </dependency>
 
-	<build>
-		<plugins>
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-compiler-plugin</artifactId>
-				<version>3.8.0</version>
-				<configuration>
-					<source>1.8</source>
-					<target>1.8</target>
-				</configuration>
-			</plugin>
-		</plugins>
-	</build>
+    <dependency>
+      <groupId>org.javassist</groupId>
+      <artifactId>javassist</artifactId>
+      <version>3.28.0-GA</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-sql_2.12</artifactId>
+      <version>2.4.4</version>
+      <exclusions>
+        <exclusion>
+          <groupId>log4j</groupId>
+          <artifactId>log4j</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.slf4j</groupId>
+          <artifactId>slf4j-log4j12</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-mapreduce-client-core</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.codehaus.jackson</groupId>
+          <artifactId>jackson-mapper-asl</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-yarn-common</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>io.netty</groupId>
+          <artifactId>netty</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
+    <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-yarn-common -->
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-yarn-common</artifactId>
+      <version>3.3.1</version>
+      <exclusions>
+        <exclusion>
+          <groupId>com.sun.jersey</groupId>
+          <artifactId>jersey-core</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-hdfs-client</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-auth</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.commons</groupId>
+          <artifactId>commons-compress</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>log4j</groupId>
+          <artifactId>log4j</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.slf4j</groupId>
+          <artifactId>slf4j-log4j12</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>net.minidev</groupId>
+          <artifactId>json-smart</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.nimbusds</groupId>
+          <artifactId>nimbus-jose-jwt</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>commons-logging</groupId>
+          <artifactId>commons-logging</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
+
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-hdfs-client</artifactId>
+      <version>3.3.1</version>
+      <exclusions>
+        <exclusion>
+          <groupId>commons-logging</groupId>
+          <artifactId>commons-logging</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
+    <dependency>
+      <groupId>com.jayway.jsonpath</groupId>
+      <artifactId>json-path</artifactId>
+      <version>2.4.0</version>
+      <exclusions>
+        <exclusion>
+          <groupId>net.minidev</groupId>
+          <artifactId>json-smart</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-dbcp2</artifactId>
+      <version>2.9.0</version>
+      <exclusions>
+        <exclusion>
+          <groupId>commons-logging</groupId>
+          <artifactId>commons-logging</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.httpcomponents</groupId>
+          <artifactId>httpclient</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.httpcomponents</groupId>
+          <artifactId>httpcore</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
+    <dependency>
+      <groupId>com.oracle.ojdbc</groupId>
+      <artifactId>ojdbc8</artifactId>
+      <version>19.3.0.0</version>
+    </dependency>
+
+    <dependency>
+      <groupId>com.oracle.oci.sdk</groupId>
+      <artifactId>oci-java-sdk-secrets</artifactId>
+      <version>2.3.0</version>
+      <exclusions>
+        <exclusion>
+          <groupId>com.oracle.oci.sdk</groupId>
+          <artifactId>oci-java-sdk-common</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-mapreduce-client-core</artifactId>
+      <version>2.8.1</version>
+      <exclusions>
+        <exclusion>
+          <groupId>com.sun.jersey</groupId>
+          <artifactId>jersey-core</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>io.netty</groupId>
+          <artifactId>netty</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.slf4j</groupId>
+          <artifactId>slf4j-log4j12</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>log4j</groupId>
+          <artifactId>log4j</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.codehaus.jackson</groupId>
+          <artifactId>jackson-mapper-asl</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-yarn-common</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.commons</groupId>
+          <artifactId>commons-compress</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-compress</artifactId>
+      <version>1.21</version>
+      <exclusions>
+        <exclusion>
+          <groupId>org.tukaani</groupId>
+          <artifactId>xz</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
+
+    <dependency>
+      <groupId>com.sun.jersey</groupId>
+      <artifactId>jersey-core</artifactId>
+      <version>1.19.4</version>
+    </dependency>
+
+
+    <!-- https://mvnrepository.com/artifact/org.freemarker/freemarker -->
+    <dependency>
+      <groupId>org.freemarker</groupId>
+      <artifactId>freemarker</artifactId>
+      <version>2.3.30</version>
+    </dependency>
+
+    <!-- https://mvnrepository.com/artifact/org.yaml/snakeyaml -->
+    <dependency>
+      <groupId>org.yaml</groupId>
+      <artifactId>snakeyaml</artifactId>
+      <version>1.27</version>
+    </dependency>
+
+
+    <dependency>
+      <groupId>com.oracle.oci.sdk</groupId>
+      <artifactId>oci-hdfs-connector</artifactId>
+      <version>3.3.0.7.0.1</version>
+      <exclusions>
+        <exclusion>
+          <groupId>org.apache.logging.log4j</groupId>
+          <artifactId>log4j-core</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.logging.log4j</groupId>
+          <artifactId>log4j-1.2-api</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.logging.log4j</groupId>
+          <artifactId>log4j-slf4j-impl</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>commons-logging</groupId>
+          <artifactId>commons-logging</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.commons</groupId>
+          <artifactId>commons-configuration2</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
+    <!-- https://mvnrepository.com/artifact/com.nimbusds/nimbus-jose-jwt -->
+    <dependency>
+      <groupId>com.nimbusds</groupId>
+      <artifactId>nimbus-jose-jwt</artifactId>
+      <version>9.15.2</version>
+      <exclusions>
+        <exclusion>
+          <groupId>net.minidev</groupId>
+          <artifactId>json-smart</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
+    <dependency>
+      <groupId>commons-io</groupId>
+      <artifactId>commons-io</artifactId>
+      <version>2.8.0</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bcprov-jdk15on</artifactId>
+      <version>1.70</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.httpcomponents</groupId>
+      <artifactId>httpcore</artifactId>
+      <version>4.4.14</version>
+      <exclusions>
+        <exclusion>
+          <artifactId>commons-logging</artifactId>
+          <groupId>commons-logging</groupId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.httpcomponents</groupId>
+      <artifactId>httpclient</artifactId>
+      <version>4.5.13</version>
+      <exclusions>
+        <exclusion>
+          <artifactId>commons-logging</artifactId>
+          <groupId>commons-logging</groupId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.httpcomponents</groupId>
+          <artifactId>httpcore</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>commons-codec</groupId>
+      <artifactId>commons-codec</artifactId>
+      <version>1.15</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.tomitribe</groupId>
+      <artifactId>tomitribe-http-signatures</artifactId>
+      <version>1.0</version>
+    </dependency>
+
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <version>30.1-jre</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.json</groupId>
+      <artifactId>json</artifactId>
+      <version>20190722</version>
+    </dependency>
+
+
+    <!-- https://mvnrepository.com/artifact/org.apache.commons/commons-collections4 -->
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-collections4</artifactId>
+      <version>4.4</version>
+      <exclusions>
+        <exclusion>
+          <groupId>org.apache.httpcomponents</groupId>
+          <artifactId>httpclient</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.httpcomponents</groupId>
+          <artifactId>httpcore</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
+    <dependency>
+      <groupId>com.oracle.oci.sdk</groupId>
+      <artifactId>oci-java-sdk-dataflow</artifactId>
+      <version>2.3.0</version>
+      <exclusions>
+        <exclusion>
+          <groupId>com.nimbusds</groupId>
+          <artifactId>nimbus-jose-jwt</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
+
+    <dependency>
+      <groupId>commons-cli</groupId>
+      <artifactId>commons-cli</artifactId>
+      <version>1.5.0</version>
+    </dependency>
+
+    <!-- Test dependencies-->
+    <dependency>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
+      <version>4.13.2</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-core</artifactId>
+      <version>4.0.0</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+
+    <plugins>
+      <plugin>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.8.1</version>
+        <executions>
+          <execution>
+            <id>build-Generator-file</id>
+            <phase>generate-sources</phase>
+            <goals>
+              <goal>compile</goal>
+            </goals>
+            <configuration>
+              <excludes>
+                <exclude>**/cp360pipeline/*</exclude>
+              </excludes>
+
+              <includes>
+                <include>src/main/resources/*.ftl</include>
+                <include>**/createPojo/*.java</include>
+              </includes>
+            </configuration>
+          </execution>
+        </executions>
+        <dependencies>
+          <dependency>
+            <groupId>org.freemarker</groupId>
+            <artifactId>freemarker</artifactId>
+            <version>2.3.31</version>
+          </dependency>
+        </dependencies>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.8.0</version>
+        <configuration>
+          <source>1.8</source>
+          <target>1.8</target>
+
+        </configuration>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>2.22.0</version>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>3.2.4</version>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+          </execution>
+        </executions>
+        <configuration>
+          <filters>
+            <filter>
+              <artifact>*:*</artifact>
+              <excludes>
+                <exclude>META-INF/*.SF</exclude>
+                <exclude>META-INF/*.DSA</exclude>
+                <exclude>META-INF/*.RSA</exclude>
+              </excludes>
+            </filter>
+          </filters>
+          <relocations>
+            <relocation>
+              <pattern>com.oracle.bmc</pattern>
+              <shadedPattern>shaded.com.oracle.bmc</shadedPattern>
+              <includes>
+                <include>com.oracle.bmc.**</include>
+              </includes>
+              <excludes>
+                <exclude>com.oracle.bmc.hdfs.**</exclude>
+              </excludes>
+            </relocation>
+          </relocations>
+          <artifactSet>
+            <excludes>
+              <exclude>org.bouncycastle:bcpkix-jdk15on</exclude>
+              <exclude>org.bouncycastle:bcprov-jdk15on</exclude>
+              <!-- Including jsr305 in the shaded jar causes a SecurityException
+                due to signer mismatch for class "javax.annotation.Nonnull" -->
+              <exclude>com.google.code.findbugs:jsr305</exclude>
+            </excludes>
+          </artifactSet>
+        </configuration>
+      </plugin>
+
+    </plugins>
+  </build>
+
 </project>
