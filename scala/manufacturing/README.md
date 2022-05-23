@@ -22,9 +22,11 @@ Before you begin:
 ## Instructions
 1. Setup StreamPool and Stream with OCI Streaming Service [Getting Started with Spark Streaming](https://docs.cloud.oracle.com/en-us/iaas/data-flow/using/spark-streaming.htm#streaming-get-started)
 2. Upload turbofan engine degradation dataset to object storage.
-3. Run RealtimeRULPredictor to train the model, trained model will be persisted in output location  provided as argument.
-4. Start SensorDataSimulator which will continuously produce data to stream.
-5. Start RealtimeRULPredictor which will predict and continuously output data to stream and autonomous database.  
+3. Update STREAMPOOL_CONNECTION, ADB_ID, USERNAME, PASSWORD [scala/manufacturing/src/main/scala/com/oracle/dataflow/utils/Constants.scala]
+4. Update libraries in provided scope to compile in build.sbt [scala/manufacturing/build.sbt]
+5. Run RealtimeRULPredictor to train the model, trained model will be persisted in output location  provided as argument.
+6. Start SensorDataSimulator which will continuously produce data to stream.
+7. Start RealtimeRULPredictor which will predict and continuously output data to stream and autonomous database.  
 
 ## To Compile
 ```sh
