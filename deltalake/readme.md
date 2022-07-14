@@ -1,0 +1,1 @@
+Delta Lake 1.2.1
