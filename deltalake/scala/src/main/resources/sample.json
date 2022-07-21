@@ -1,0 +1,40 @@
+{
+  "add": {
+    "path": "part-00000-8f7185fc-dd0f-4da3-af03-230b033b2e57-c000.snappy.parquet",
+    "partitionValues": {},
+    "size": 10970572,
+    "modificationTime": 1657199314000,
+    "dataChange": true,
+    "stats": "{\"numRecords\":134301,\"minValues\":{\"_id\":\"0024b4301e07225ee28eaeaeb08cc7e8\",\"_rev\":\"1-000047631c2d29b2dd035c36df5bb3\",\"dropoff_datetime\":\"09/02/13 0:00\",\"dropoff_latitude\":\"-3.48E+03\",\"dropoff_longitude\":\"-1.10E-01\",\"hack_license\":\"0002555BBE359440D6CEB34B699D3932\",\"medallion\":\"00005007A9F30E289E760362F69E4EAD\",\"passenger_count\":\"0\",\"pickup_datetime\":\"08/02/13 23:08\",\"pickup_latitude\":\"0.00E+00\",\"pickup_longitude\":\"-1.67E-03\",\"rate_code\":\"0\",\"store_and_fwd_flag\":\"N\",\"trip_distance\":\"0.00E+00\",\"trip_time_in_secs\":\"1000\",\"vendor_id\":\"CMT\",\"time_stamp\":\"2022-07-07T13:08:28.678Z\"},\"maxValues\":{\"_id\":\"fff43e5eb5662eecf42a3f9b5ff42214\",\"_rev\":\"1-ffffa358cd2bc5dbea3e8801c82a6c�\",\"dropoff_datetime\":\"26/11/13 9:59\",\"dropoff_latitude\":\"7.63E-01\",\"dropoff_longitude\":\"0.00E+00\",\"hack_license\":\"FFFC8985B6B37B60AE71741C01AC423A\",\"medallion\":\"FFFECF75AB6CC4FF9E8A8B633AB81C26\",\"passenger_count\":\"6\",\"pickup_datetime\":\"26/11/13 9:59\",\"pickup_latitude\":\"7.38E+01\",\"pickup_longitude\":\"0.00E+00\",\"rate_code\":\"6\",\"store_and_fwd_flag\":\"Y\",\"trip_distance\":\"9.99E+00\",\"trip_time_in_secs\":\"999\",\"vendor_id\":\"VTS\",\"time_stamp\":\"2022-07-07T13:08:28.678Z\"},\"nullCount\":{\"_id\":0,\"_rev\":0,\"dropoff_datetime\":0,\"dropoff_latitude\":0,\"dropoff_longitude\":0,\"hack_license\":0,\"medallion\":0,\"passenger_count\":0,\"pickup_datetime\":0,\"pickup_latitude\":0,\"pickup_longitude\":0,\"rate_code\":0,\"store_and_fwd_flag\":74044,\"trip_distance\":0,\"trip_time_in_secs\":0,\"vendor_id\":0,\"time_stamp\":0}}"
+  }
+}
+{
+  "add": {
+    "path": "part-00001-a6550b66-c4e2-446e-8dbc-b6d60a72031e-c000.snappy.parquet",
+    "partitionValues": {},
+    "size": 9344866,
+    "modificationTime": 1657199314000,
+    "dataChange": true,
+    "stats": "{\"numRecords\":115698,\"minValues\":{\"_id\":\"0024b4301e07225ee28eaeaeb009e942\",\"_rev\":\"1-00000bb400da68083d18a9934b71e8\",\"dropoff_datetime\":\"09/02/13 0:00\",\"dropoff_latitude\":\"-3.08E+03\",\"dropoff_longitude\":\"-1.50E-01\",\"hack_license\":\"0002555BBE359440D6CEB34B699D3932\",\"medallion\":\"00005007A9F30E289E760362F69E4EAD\",\"passenger_count\":\"0\",\"pickup_datetime\":\"08/02/13 23:15\",\"pickup_latitude\":\"0.00E+00\",\"pickup_longitude\":\"-1.23E+00\",\"rate_code\":\"0\",\"store_and_fwd_flag\":\"N\",\"trip_distance\":\"0.00E+00\",\"trip_time_in_secs\":\"1000\",\"vendor_id\":\"CMT\",\"time_stamp\":\"2022-07-07T13:08:28.678Z\"},\"maxValues\":{\"_id\":\"fff43e5eb5662eecf42a3f9b5ff14ac1\",\"_rev\":\"1-ffff5a36ea642406b1ea9f518527e5�\",\"dropoff_datetime\":\"26/11/13 9:59\",\"dropoff_latitude\":\"7.40E+01\",\"dropoff_longitude\":\"2.08E+03\",\"hack_license\":\"FFFBCEA3D4E21E05902EE67AD556F67C\",\"medallion\":\"FFFECF75AB6CC4FF9E8A8B633AB81C26\",\"passenger_count\":\"6\",\"pickup_datetime\":\"26/11/13 9:59\",\"pickup_latitude\":\"7.40E+01\",\"pickup_longitude\":\"0.00E+00\",\"rate_code\":\"6\",\"store_and_fwd_flag\":\"Y\",\"trip_distance\":\"9.99E+00\",\"trip_time_in_secs\":\"999\",\"vendor_id\":\"VTS\",\"time_stamp\":\"2022-07-07T13:08:28.678Z\"},\"nullCount\":{\"_id\":0,\"_rev\":0,\"dropoff_datetime\":0,\"dropoff_latitude\":0,\"dropoff_longitude\":0,\"hack_license\":0,\"medallion\":0,\"passenger_count\":0,\"pickup_datetime\":0,\"pickup_latitude\":0,\"pickup_longitude\":0,\"rate_code\":0,\"store_and_fwd_flag\":61572,\"trip_distance\":0,\"trip_time_in_secs\":0,\"vendor_id\":0,\"time_stamp\":0}}"
+  }
+}
+{
+  "commitInfo": {
+    "timestamp": 1657199314630,
+    "operation": "WRITE",
+    "operationParameters": {
+      "mode": "Append",
+      "partitionBy": "[]"
+    },
+    "readVersion": 18,
+    "isolationLevel": "Serializable",
+    "isBlindAppend": true,
+    "operationMetrics": {
+      "numFiles": "2",
+      "numOutputRows": "249999",
+      "numOutputBytes": "20315438"
+    },
+    "engineInfo": "Apache-Spark/3.2.1 Delta-Lake/1.2.1-oci-0.1.0",
+    "txnId": "ffee50f1-7c14-4c40-8655-e3bb8e6ee87e"
+  }
+}
