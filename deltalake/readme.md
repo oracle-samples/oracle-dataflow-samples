@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Delta Lake Support on OCI Data Flow
 
 Oracle Cloud Infrastructure (OCI) [Data Flow](https://www.oracle.com/in/big-data/data-flow/) is a fully managed Apache Spark service that performs processing tasks on extremely large datasets—without infrastructure to deploy or manage. Developers can also use Spark Streaming to perform cloud ETL on their continuously produced streaming data. This enables rapid application delivery because developers can focus on app development, not infrastructure management.
@@ -72,7 +71,3 @@ Main class : com.oracle.delta.GenerateCSVData
 Arguments: oci://<location>/samplecsv.csv oci://<location>/delta/spark-DeltaTable oci://<location>/delta/spark-ParquetToDeltaTable <sleepTimeInSec> <totalRuns>
 ```
 `Note: Build jar artifact from "mvn clean install`
-
-=======
-Delta Lake 1.2.1
->>>>>>> adding Delta Lake documentation
