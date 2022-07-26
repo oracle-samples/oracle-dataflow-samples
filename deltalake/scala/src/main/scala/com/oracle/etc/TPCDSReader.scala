@@ -12,7 +12,7 @@ object TPCDSReader extends App{
   val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
 
    val lines =
-    Source.fromFile("/Users/mohankumarln/Desktop/Delta Spark/Spark 3.2.1 Delta SF1000-run3")
+    Source.fromFile("<location to the application log which has the time details>")
       .getLines()
       .filter(s => s.startsWith("query")).toList
 

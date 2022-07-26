@@ -1,4 +1,4 @@
-package com.oracle.delta
+package com.oracle.spark
 
 object LongRun {
 
