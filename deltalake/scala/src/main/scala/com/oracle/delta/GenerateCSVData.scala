@@ -24,11 +24,8 @@ object GenerateCSVData {
        println("Wakeup " + count + " -- " + System.currentTimeMillis())
        DeltaTable.generateCSVData(inputPath, parquetPath + s"-$count")
 
-
        Thread.sleep(1000 * sleepTimeInSec.toInt)
        count = count + 1
      }
-
   }
-
 }

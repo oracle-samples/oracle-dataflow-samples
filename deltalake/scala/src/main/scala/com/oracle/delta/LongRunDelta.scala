@@ -27,7 +27,5 @@ object LongRunDelta {
        Thread.sleep(1000 * sleepTimeInSec.toInt)
        count = count + 1
      }
-
   }
-
 }

@@ -29,7 +29,4 @@ object Utils {
     original_df.write.partitionBy("vendor_id").mode("overwrite").parquet(outputPath)
 
   }
-
-
-
 }
