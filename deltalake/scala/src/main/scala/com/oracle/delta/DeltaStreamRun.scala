@@ -16,9 +16,7 @@ object DeltaStreamRun {
     val checkpoint = args(3)
 
     println("\n" + inputPath +  ", " + deltaPath +  ", " + checkpoint)
-
     DeltaTable.StartDeltaStreamSink(inputPath, parquetPath, checkpoint)
 
   }
-
 }

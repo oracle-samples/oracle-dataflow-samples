@@ -27,7 +27,5 @@ object LongRun {
        Thread.sleep(1000 * sleepTimeInSec.toInt)
        count = count + 1
      }
-
   }
-
 }

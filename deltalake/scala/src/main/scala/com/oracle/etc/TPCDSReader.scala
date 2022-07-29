@@ -17,7 +17,6 @@ object TPCDSReader extends App{
       .filter(s => s.startsWith("query")).toList
 
 //  println(lines)
-  // Users/mohankumarln/Desktop/TPC-DS-Spark321/Spark 3.2.1 SP1000-run3
 
   lines.foreach(line =>
       {

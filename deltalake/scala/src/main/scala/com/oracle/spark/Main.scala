@@ -16,7 +16,6 @@ object Main {
     val inputPath = args(0)
     val outputPath = args(1)
 
-
     val spark = SparkSession
       .builder()
       .appName("Spark Simulation")
@@ -27,7 +26,6 @@ object Main {
       .format("csv")
       .option("header", "true")
       .load(inputPath)
-
 
     original_df
       .withColumn("time_stamp", current_timestamp())

@@ -7,9 +7,9 @@ To know more get started [here](https://docs.oracle.com/en-us/iaas/data-flow/usi
 
 Delta Lake 1.2.1 now integrated in Data Flow Spark 3.2.1 processing engine. To use this feature please
 Select your application’s Spark version to Spark 3.2.1 from console, or cli.
-Use `delta`  format as mentioned in the documentations. Delta Lake release [notes](https://github.com/delta-io/delta/releases/tag/v1.2.1) and [documentation](https://docs.delta.io/latest/delta-intro.html#) for further understanding. Below are some sample usage
+Use `delta`  format as mentioned in the documentations. Delta Lake release [notes](https://github.com/delta-io/delta/releases/tag/v1.2.1) and [documentation](https://docs.delta.io/latest/delta-intro.html#) for further understanding.
 
-Running Delta Lake api is as easy as any other format. Data Flow Spark engine support `delta` by format default. Delta Lake API are available in Java/Scala/Python languages, Include delta-spark package by `pip install delta-spark` If you are using custom archive.zip dependency packager.  
+OCI Data Flow Spark engine support `delta` format default and running Delta Lake api is as easy as any other format. Delta Lake API are available in Java/Scala/Python languages, Include `delta-spark` python package as mentioned in [Adding Third-Party Libraries](https://docs.oracle.com/en-us/iaas/data-flow/using/third-party-libraries.htm) If you are using custom archive.zip dependency packager.  
 
 Java/Scala
 > spark.read().format("delta").load(deltaTablePath)
@@ -71,4 +71,3 @@ Main class : com.oracle.delta.GenerateCSVData
 Arguments: oci://<location>/samplecsv.csv oci://<location>/delta/spark-DeltaTable oci://<location>/delta/spark-ParquetToDeltaTable <sleepTimeInSec> <totalRuns>
 ```
 `Note: Build jar artifact from "mvn clean install`
-

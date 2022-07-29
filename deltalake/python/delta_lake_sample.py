@@ -38,7 +38,6 @@ if __name__ == "__main__":
     deltaTablePath = sys.argv[2]
     parquetTablePath = sys.argv[3]
 
-
     original_df = spark.read.format("csv").option("header", "true").load(csvFilePath).withColumn("time_stamp", current_timestamp())
     original_df.write.partitionBy("vendor_id").format("delta").mode("overwrite").save(deltaTablePath)
     original_df.write.mode("overwrite").parquet(parquetTablePath)
@@ -66,7 +65,6 @@ if __name__ == "__main__":
     df2_1 = spark.sql("SELECT count(*) FROM delta.`" + deltaTablePath + "@v1`")
     df2_1.show()
 
-
     print("\nHistory for versionAsOf 3" + deltaTablePath)
     df3 = spark.read.format("delta").option("versionAsOf", 1).load(deltaTablePath)
     df3.show()
@@ -79,10 +77,7 @@ if __name__ == "__main__":
     describe = spark.sql("DESCRIBE HISTORY delta.`" + deltaTablePath + "`");
     describe.show()
 
-
     spark.sql("CONVERT TO DELTA parquet.`" + parquetTablePath + "`");
-
-
 
     print("\nStarting SQL DeltaTable operations on " + deltaTablePath)
     from delta.tables import *
