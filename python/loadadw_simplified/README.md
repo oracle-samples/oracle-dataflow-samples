@@ -47,6 +47,8 @@ No additional packages required for this example.
 * Copy loadadw_simplified.py to object store.
 * Create a Data Flow Python application. No archive required.
   * Refer [here](https://docs.cloud.oracle.com/en-us/iaas/data-flow/using/dfs_data_flow_library.htm#create_pyspark_app) for more information.
+  * <img src="/Users/xinyazha/sss_github/oracle-dataflow-samples/python/loadadw_simplified/console_exmple_1.png" style="zoom:80%;" />
+  * <img src="/Users/xinyazha/sss_github/oracle-dataflow-samples/python/loadadw_simplified/console_example_2.png" style="zoom:80%;" />
 * Run the application.
 
 ## Run the Application using OCI Cloud Shell or OCI CLI
@@ -65,10 +67,10 @@ oci data-flow application create \
     --spark-version 3.0.2 \
     --file-uri oci://<bucket>@<namespace>/${spark_application} \
     --language Python
+    --configuration "spark.oracle.datasource.enabled=true"
 oci data-flow run create \
     --application-id <application_ocid> \
     --compartment-id <compartment_ocid> \
-    --application-id <application_ocid> \
     --display-name 'PySpark Load ADW Simplified"
 ```
 
