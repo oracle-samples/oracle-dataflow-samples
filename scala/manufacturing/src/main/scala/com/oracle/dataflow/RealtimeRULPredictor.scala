@@ -19,7 +19,10 @@ object RealtimeRULPredictor {
     val inputModelPath = args(1)
     val topics = args(2)
     val outputTopics = args(3)
-    val triggerInSeconds = args(4).toLong
+    val adbId = args(4)
+    val adbUserName = args(5)
+    val adbPassword = args(6)
+    val triggerInSeconds = args(7).toLong
 
     // Step 1: Read sensor data from stream
     println("Starting RealtimeRULPredictor")
@@ -95,10 +98,10 @@ object RealtimeRULPredictor {
 
       maintenanceAlert
         .write.format("oracle").mode(SaveMode.Append)
-        .option("adbId", ADB_ID)
+        .option("adbId", adbId)
         .option("dbtable", PREDICTED_RUL_ALERTS)
-        .option("user", USERNAME)
-        .option("password", PASSWORD)
+        .option("user", adbUserName)
+        .option("password", adbPassword)
         .save()
     }).option("checkpointLocation", checkpointLocation)
       .trigger(Trigger.ProcessingTime(triggerInSeconds))

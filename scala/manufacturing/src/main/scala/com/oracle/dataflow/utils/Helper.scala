@@ -112,8 +112,8 @@ object Helper {
       .option("kafka.bootstrap.servers", bootStrapServer)
       .option("topic", topics)
       .option("kafka.security.protocol", "SASL_SSL")
-      // .option("kafka.sasl.mechanism", "OCI-RSA-SHA256")
-      .option("kafka.sasl.mechanism", "PLAIN")
+      .option("kafka.sasl.mechanism", "OCI-RSA-SHA256")
+     // .option("kafka.sasl.mechanism", "PLAIN")
       .option("kafka.sasl.jaas.config", connectionString)
       .save()
   }
@@ -133,8 +133,8 @@ object Helper {
       .option("kafka.bootstrap.servers", bootStrapServer)
       .option("subscribe", topics)
       .option("kafka.security.protocol", "SASL_SSL")
-      //.option("kafka.sasl.mechanism", "OCI-RSA-SHA256")
-      .option("kafka.sasl.mechanism", "PLAIN")
+      .option("kafka.sasl.mechanism", "OCI-RSA-SHA256")
+      //.option("kafka.sasl.mechanism", "PLAIN")
       .option("kafka.sasl.jaas.config", connectionString)
       .option("kafka.max.partition.fetch.bytes", 1024 * 1024) // limit request size to 1MB per partition
       .option("startingOffsets", "latest")

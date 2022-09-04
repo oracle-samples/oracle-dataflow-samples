@@ -16,6 +16,7 @@ import java.io.File
  * TRAINING DATA: Run-To-Error data of fleet of equipment of specific type.
  * REF          : https://spark.apache.org/docs/latest/ml-classification-regression.html#survival-regression
  */
+
 object RULSurvivalModelTrainer {
   def main(args: Array[String]): Unit = {
     println("Starting RULSurvivalModelTrainer")
@@ -23,8 +24,6 @@ object RULSurvivalModelTrainer {
     val outputModelPath = args(1)
     val testDataPath = args(2)
     val testRulPath = args(3)
-
-    spark.sparkContext.setLogLevel("OFF")
 
     // 1. Prepare Training Data
     val rawTrainingData = spark.read.schema(EquipmentTrainingData.schema)

@@ -11,8 +11,8 @@ object Constants {
   val RUL_LABEL_FIELD = "rul"
 
   // OCI Streaming Connection Information
-  val STREAMPOOL_CONNECTION = "<REPLACE_STREAMPOOL_CONNECTION>"
   val BOOTSTRAP_SERVER = "cell-1.streaming.us-ashburn-1.oci.oraclecloud.com:9092"
+  val STREAMPOOL_CONNECTION = "shaded.com.oracle.bmc.auth.sasl.ResourcePrincipalsLoginModule required intent=\"streamPoolId:%s\";"
 
   // Producer
   val NUMBER_OF_ASSETS = 10000
@@ -22,9 +22,5 @@ object Constants {
   val YELLOW_BATCH_SIZE = 5
 
   // Consumer
-  val ADB_ID = "REPLACE_ADB_ID"
   val PREDICTED_RUL_ALERTS = "ADMIN.PREDICTED_RUL_ALERTS"
-  val SENSOR_DATA_READINGS = "ADMIN.SENSOR_DATA_READINGS"
-  val USERNAME = "REPLACE_USERNAME"
-  val PASSWORD = "REPLACE_PASSWORD"
 }

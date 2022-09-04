@@ -107,7 +107,9 @@ object SensorDataSimulator {
   def main(args: Array[String]): Unit = {
     val checkpointLocation = args(0)
     val topics = args(1)
-    val triggerIntervalInSeconds = args(2).toLong
+    val streampoolId = args(2)
+    val bootstrapServer = args(3)
+    val triggerIntervalInSeconds = args(4).toLong
 
     // Step 1: Create fake readstream
     val fakeInputStream = spark.readStream.format("rate")
@@ -127,7 +129,7 @@ object SensorDataSimulator {
         .select(lit(batchId).cast(StringType).as("key"),to_json(struct("*")).as("value"))
       testData.show(5,false)
 
-      Helper.ociWriterPlain(testData,BOOTSTRAP_SERVER,topics,STREAMPOOL_CONNECTION)
+      Helper.ociWriterPlain(testData,bootstrapServer,topics,STREAMPOOL_CONNECTION.format(streampoolId))
     }).option("checkpointLocation", checkpointLocation)
       .trigger(Trigger.ProcessingTime(triggerIntervalInSeconds, TimeUnit.SECONDS))
       .start()
