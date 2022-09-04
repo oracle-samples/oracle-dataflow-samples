@@ -11,8 +11,7 @@ object Constants {
   val RUL_LABEL_FIELD = "rul"
 
   // OCI Streaming Connection Information
-  val BOOTSTRAP_SERVER = "cell-1.streaming.us-ashburn-1.oci.oraclecloud.com:9092"
-  val STREAMPOOL_CONNECTION = "shaded.com.oracle.bmc.auth.sasl.ResourcePrincipalsLoginModule required intent=\"streamPoolId:%s\";"
+  val STREAMPOOL_CONNECTION = "com.oracle.bmc.auth.sasl.ResourcePrincipalsLoginModule required intent=\"streamPoolId:%s\";"
 
   // Producer
   val NUMBER_OF_ASSETS = 10000

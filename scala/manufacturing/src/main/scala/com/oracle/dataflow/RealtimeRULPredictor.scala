@@ -19,23 +19,16 @@ object RealtimeRULPredictor {
     val inputModelPath = args(1)
     val topics = args(2)
     val outputTopics = args(3)
-    val adbId = args(4)
-    val adbUserName = args(5)
-    val adbPassword = args(6)
-    val triggerInSeconds = args(7).toLong
+    val bootstrapServer = args(4)
+    val streampoolId = args(5)
+    val triggerInSeconds = args(6).toLong
+    val adbId = args(7)
+    val adbUserName = args(8)
+    val adbPassword = args(9)
 
     // Step 1: Read sensor data from stream
     println("Starting RealtimeRULPredictor")
-    val testDataStream = spark.readStream
-      .format("kafka")
-      .option("kafka.bootstrap.servers", BOOTSTRAP_SERVER)
-      .option("subscribe", topics)
-      .option("kafka.security.protocol", "SASL_SSL")
-      .option("kafka.sasl.mechanism", "PLAIN")
-      .option("kafka.sasl.jaas.config", STREAMPOOL_CONNECTION)
-      .option("kafka.max.partition.fetch.bytes", 1024 * 1024)
-      .option("startingOffsets", "latest")
-      .load()
+    val testDataStream = Helper.ociStreamReader(bootstrapServer,topics,STREAMPOOL_CONNECTION.format(streampoolId))
 
     // Step 2: Encode data to schema
     val dataSchema = EquipmentTrainingData.schema.add("eventTime", TimestampType)
@@ -92,10 +85,9 @@ object RealtimeRULPredictor {
       println(s"\nsending data to oci stream")
       val outputStreamData = greenRUL.withColumn("eventTime", unix_timestamp())
         .select(lit(batchId).cast(StringType).as("key"),to_json(struct("*")).as("value"))
-      Helper.ociWriterPlain(outputStreamData,BOOTSTRAP_SERVER,outputTopics,STREAMPOOL_CONNECTION)
+      Helper.ociStreamWriter(outputStreamData,bootstrapServer,outputTopics,STREAMPOOL_CONNECTION.format(streampoolId))
 
       // Step 7: Using Spark Oracle Datasource send RUL alters to Autonomous Database
-
       maintenanceAlert
         .write.format("oracle").mode(SaveMode.Append)
         .option("adbId", adbId)

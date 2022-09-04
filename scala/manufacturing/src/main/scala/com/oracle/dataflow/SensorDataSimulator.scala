@@ -1,6 +1,6 @@
 package com.oracle.dataflow
 
-import com.oracle.dataflow.utils.Constants.{BOOTSTRAP_SERVER, GREEN_BATCH_SIZE, MAX_AGE, NUMBER_OF_ASSETS, RED_BATCH_SIZE, STREAMPOOL_CONNECTION, YELLOW_BATCH_SIZE}
+import com.oracle.dataflow.utils.Constants.{GREEN_BATCH_SIZE, MAX_AGE, NUMBER_OF_ASSETS, RED_BATCH_SIZE, STREAMPOOL_CONNECTION, YELLOW_BATCH_SIZE}
 import com.oracle.dataflow.utils.Helper
 import com.oracle.dataflow.utils.SparkSessionUtils.spark
 import org.apache.spark.sql.DataFrame
@@ -128,8 +128,8 @@ object SensorDataSimulator {
         .toDF().withColumn("eventTime", unix_timestamp())
         .select(lit(batchId).cast(StringType).as("key"),to_json(struct("*")).as("value"))
       testData.show(5,false)
-
-      Helper.ociWriterPlain(testData,bootstrapServer,topics,STREAMPOOL_CONNECTION.format(streampoolId))
+      println("streamPool Connection " + STREAMPOOL_CONNECTION.format(streampoolId))
+      Helper.ociStreamWriter(testData,bootstrapServer,topics,STREAMPOOL_CONNECTION.format(streampoolId))
     }).option("checkpointLocation", checkpointLocation)
       .trigger(Trigger.ProcessingTime(triggerIntervalInSeconds, TimeUnit.SECONDS))
       .start()
