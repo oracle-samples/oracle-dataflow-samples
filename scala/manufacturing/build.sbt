@@ -3,17 +3,24 @@ import scala.Console.in
 organization := "com.oracle.dataflow"
 name := "manufacturing"
 description := "Trains and deploys Remaining Useful Life (RUL) of critical equipment in production line of factory floor."
-version := "0.5"
+version := "0.6"
 scalaVersion := "2.12.15"
 
 val sparkVersion = "3.2.1"
+val ociSDKVersion = "2.20.0"
+val typesafeVersion = "1.4.2"
 
 libraryDependencies ++= Seq(
   "org.apache.spark" %% "spark-core" % sparkVersion % "provided",
   "org.apache.spark" %% "spark-sql" % sparkVersion % "provided",
   "org.apache.spark" %% "spark-mllib" % sparkVersion % "provided",
   "org.apache.spark" %% "spark-sql-kafka-0-10" % sparkVersion,
-  "com.oracle.oci.sdk" % "oci-java-sdk-addons-sasl" % "2.20.0",
+  "com.oracle.oci.sdk" % "oci-java-sdk-addons-sasl" % ociSDKVersion,
+  "com.typesafe" % "config" % typesafeVersion,
+  "com.oracle.oci.sdk" % "oci-java-sdk-core" % ociSDKVersion,
+  "com.oracle.oci.sdk" % "oci-java-sdk-common" % ociSDKVersion,
+  "com.oracle.oci.sdk" % "oci-java-sdk-objectstorage" % ociSDKVersion,
+  "com.oracle.oci.sdk" % "oci-java-sdk-secrets" % ociSDKVersion
 )
 
 assemblyMergeStrategy in assembly := {

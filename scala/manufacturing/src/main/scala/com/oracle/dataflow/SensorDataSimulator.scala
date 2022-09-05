@@ -1,8 +1,9 @@
 package com.oracle.dataflow
 
 import com.oracle.dataflow.utils.Constants.{GREEN_BATCH_SIZE, MAX_AGE, NUMBER_OF_ASSETS, RED_BATCH_SIZE, STREAMPOOL_CONNECTION, YELLOW_BATCH_SIZE}
-import com.oracle.dataflow.utils.Helper
+import com.oracle.dataflow.utils.{ApplicationConfiguration, Helper}
 import com.oracle.dataflow.utils.SparkSessionUtils.spark
+import com.typesafe.config.Config
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions.{lit, struct, to_json, unix_timestamp}
 import org.apache.spark.sql.streaming.{GroupState, Trigger}
@@ -105,11 +106,18 @@ object SensorDataSimulator {
 
 
   def main(args: Array[String]): Unit = {
-    val checkpointLocation = args(0)
-    val topics = args(1)
-    val streampoolId = args(2)
-    val bootstrapServer = args(3)
-    val triggerIntervalInSeconds = args(4).toLong
+    println("Starting SensorDataSimulator")
+    if (args.length == 0) {
+      println("Missing configuration file argument.Please provide config.")
+      sys.exit(1)
+    }
+    val configFile = args(0)
+    val appConf:Config = new ApplicationConfiguration(configFile).applicationConf
+    val checkpointLocation = appConf.getString("simulator.checkpointLocation")
+    val topics = appConf.getString("simulator.topics")
+    val streampoolId = appConf.getString("simulator.streampoolId")
+    val bootstrapServer = appConf.getString("simulator.bootstrapServer")
+    val triggerIntervalInSeconds = appConf.getInt("simulator.triggerIntervalInSeconds")
 
     // Step 1: Create fake readstream
     val fakeInputStream = spark.readStream.format("rate")

@@ -4,6 +4,8 @@ import com.oracle.dataflow.utils.Constants.SURVIVAL_MODEL_DIR
 import com.oracle.dataflow.utils.Helper.{createTestDataset, evaluate, getAssembler, getScalerModel, preProcess, scaleFeatures, selectFeatures}
 import com.oracle.dataflow.utils.SparkSessionUtils.spark
 import com.oracle.dataflow.schema.EquipmentTrainingData
+import com.oracle.dataflow.utils.ApplicationConfiguration
+import com.typesafe.config.Config
 import org.apache.spark.ml.regression.{AFTSurvivalRegression, AFTSurvivalRegressionModel}
 
 import java.io.File
@@ -20,10 +22,17 @@ import java.io.File
 object RULSurvivalModelTrainer {
   def main(args: Array[String]): Unit = {
     println("Starting RULSurvivalModelTrainer")
-    val trainingDataPath = args(0)
-    val outputModelPath = args(1)
-    val testDataPath = args(2)
-    val testRulPath = args(3)
+    if (args.length == 0) {
+      println("Missing configuration file argument.Please provide config.")
+      sys.exit(1)
+    }
+    val configFile = args(0)
+    val appConf:Config = new ApplicationConfiguration(configFile).applicationConf
+    val trainingDataPath = appConf.getString("modelTrainer.trainingDataset")
+    val outputModelPath = appConf.getString("modelTrainer.modelOutputPath")
+    val testDataPath = appConf.getString("modelTrainer.testSensorDataset")
+    val testRulPath = appConf.getString("modelTrainer.testRULDataset")
+    val maxIter = appConf.getInt("modelTrainer.maxIter")
 
     // 1. Prepare Training Data
     val rawTrainingData = spark.read.schema(EquipmentTrainingData.schema)
@@ -46,7 +55,7 @@ object RULSurvivalModelTrainer {
       .setCensorCol("censor")
       .setFeaturesCol("scaled_features")
       .setLabelCol("rul")
-      .setMaxIter(1000)
+      .setMaxIter(maxIter)
     val model:AFTSurvivalRegressionModel = survivalModel.fit(trainingData)
 
     // 3. Evaluate Model

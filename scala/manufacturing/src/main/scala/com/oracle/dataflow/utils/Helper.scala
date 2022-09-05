@@ -1,6 +1,7 @@
 package com.oracle.dataflow.utils
 
 import com.oracle.dataflow.schema.EquipmentTestData
+import com.oracle.dataflow.utils.Constants.{DATAFLOW_AUTH_ENV, DELEGATION, RP, SPARK_HADOOP_FS_DELEGATION_TOKEN_PATH_ENV}
 import com.oracle.dataflow.utils.SparkSessionUtils.spark
 import org.apache.spark.ml.evaluation.RegressionEvaluator
 import org.apache.spark.ml.feature.{MinMaxScaler, MinMaxScalerModel, VectorAssembler}
@@ -100,7 +101,6 @@ object Helper {
 
   /**
    * Write to OCI Streaming Service
-   *
    * @param ds
    * @param bootStrapServer
    * @param topics
@@ -118,7 +118,6 @@ object Helper {
 
   /**
    * Read from OCI Streaming Service
-   *
    * @param bootStrapServer
    * @param topics
    * @param connectionString

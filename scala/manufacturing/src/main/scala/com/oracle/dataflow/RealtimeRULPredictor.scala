@@ -3,7 +3,8 @@ package com.oracle.dataflow
 import com.oracle.dataflow.utils.Constants._
 import com.oracle.dataflow.utils.SparkSessionUtils.spark
 import com.oracle.dataflow.schema.EquipmentTrainingData
-import com.oracle.dataflow.utils.Helper
+import com.oracle.dataflow.utils.{ApplicationConfiguration, Helper}
+import com.typesafe.config.Config
 import org.apache.spark.ml.feature.{MinMaxScalerModel, VectorAssembler}
 import org.apache.spark.ml.regression.AFTSurvivalRegressionModel
 import org.apache.spark.sql.functions.{col, current_timestamp, from_json, lit, struct, to_json, unix_timestamp}
@@ -15,20 +16,27 @@ import java.io.File
 
 object RealtimeRULPredictor {
   def main(args: Array[String]): Unit = {
-    val checkpointLocation = args(0)
-    val inputModelPath = args(1)
-    val topics = args(2)
-    val outputTopics = args(3)
-    val bootstrapServer = args(4)
-    val streampoolId = args(5)
-    val triggerInSeconds = args(6).toLong
-    val adbId = args(7)
-    val adbUserName = args(8)
-    val adbPassword = args(9)
+    println("Starting RUL Predictor")
+
+    if (args.length == 0) {
+      println("Missing configuration file argument.Please provide config.")
+      sys.exit(1)
+    }
+    val configFile = args(0)
+    val appConf:Config = new ApplicationConfiguration(configFile).applicationConf
+    val checkpointLocation = appConf.getString("predictor.checkpointLocation")
+    val inputTopics = appConf.getString("predictor.inputTopics")
+    val inputModelPath = appConf.getString("predictor.inputModelPath")
+    val streampoolId = appConf.getString("predictor.streampoolId")
+    val bootstrapServer = appConf.getString("predictor.bootstrapServer")
+    val triggerIntervalInSeconds = appConf.getInt("predictor.triggerIntervalInSeconds")
+    val adbId = appConf.getInt("predictor.adbId")
+    val adbUserName = appConf.getInt("predictor.adbUserName")
+    val adbPassword = appConf.getInt("predictor.adbPassword")
 
     // Step 1: Read sensor data from stream
     println("Starting RealtimeRULPredictor")
-    val testDataStream = Helper.ociStreamReader(bootstrapServer,topics,STREAMPOOL_CONNECTION.format(streampoolId))
+    val testDataStream = Helper.ociStreamReader(bootstrapServer,inputTopics,STREAMPOOL_CONNECTION.format(streampoolId))
 
     // Step 2: Encode data to schema
     val dataSchema = EquipmentTrainingData.schema.add("eventTime", TimestampType)
@@ -96,7 +104,7 @@ object RealtimeRULPredictor {
         .option("password", adbPassword)
         .save()
     }).option("checkpointLocation", checkpointLocation)
-      .trigger(Trigger.ProcessingTime(triggerInSeconds))
+      .trigger(Trigger.ProcessingTime(triggerIntervalInSeconds))
       .start()
 
     spark.streams.awaitAnyTermination
