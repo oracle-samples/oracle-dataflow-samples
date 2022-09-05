@@ -26,8 +26,13 @@ object IdentityUtils {
 
   def getClientConfigurator: ClientConfigurator = {
     if (isRunningInDataFlow) {
-      println(s"delegation client configurator $getDelegationTokenPath")
-      return new DelegationTokenClientConfigurator(getDelegationTokenPath)
+     if (getDelegationTokenPath != null) {
+       println(s"delegation client configurator $getDelegationTokenPath")
+       return new DelegationTokenClientConfigurator(getDelegationTokenPath)
+     } else {
+       println("Default configurator for RP")
+       new DefaultConfigurator
+     }
     }
     println("using default configurator")
     new DefaultConfigurator

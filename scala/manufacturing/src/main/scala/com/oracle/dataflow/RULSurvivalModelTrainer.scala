@@ -21,7 +21,6 @@ import java.io.File
 
 object RULSurvivalModelTrainer {
   def main(args: Array[String]): Unit = {
-    println("Starting RULSurvivalModelTrainer")
     if (args.length == 0) {
       println("Missing configuration file argument.Please provide config.")
       sys.exit(1)

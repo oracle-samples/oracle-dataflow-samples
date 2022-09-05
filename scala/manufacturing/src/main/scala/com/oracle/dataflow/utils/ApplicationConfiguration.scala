@@ -15,6 +15,14 @@ class ApplicationConfiguration(configFilePath: String) {
   val osInfo = ObjectStorageUriParser.objectStorageDetails
   val resp:GetObjectResponse = objectStorageClient.getObject(GetObjectRequest.builder().namespaceName(osInfo.namespace)
     .bucketName(osInfo.bucket).objectName(osInfo.obj).build())
-  val conf=Source.fromInputStream(resp.getInputStream).getLines().mkString("\n")
-  val applicationConf: Config = ConfigFactory.parseString(conf)
+  var confString:String = ""
+  var applicationConf: Config = _
+  try {
+    confString = Source.fromInputStream(resp.getInputStream).getLines().mkString("\n")
+    applicationConf = ConfigFactory.parseString(confString)
+  } finally {
+    if (resp != null) {
+      resp.getInputStream.close();
+    }
+  }
 }

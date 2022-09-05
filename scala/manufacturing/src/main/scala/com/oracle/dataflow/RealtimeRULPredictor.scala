@@ -16,8 +16,6 @@ import java.io.File
 
 object RealtimeRULPredictor {
   def main(args: Array[String]): Unit = {
-    println("Starting RUL Predictor")
-
     if (args.length == 0) {
       println("Missing configuration file argument.Please provide config.")
       sys.exit(1)
@@ -26,6 +24,7 @@ object RealtimeRULPredictor {
     val appConf:Config = new ApplicationConfiguration(configFile).applicationConf
     val checkpointLocation = appConf.getString("predictor.checkpointLocation")
     val inputTopics = appConf.getString("predictor.inputTopics")
+    val outputTopics = appConf.getString("predictor.outputTopics")
     val inputModelPath = appConf.getString("predictor.inputModelPath")
     val streampoolId = appConf.getString("predictor.streampoolId")
     val bootstrapServer = appConf.getString("predictor.bootstrapServer")
@@ -33,6 +32,8 @@ object RealtimeRULPredictor {
     val adbId = appConf.getInt("predictor.adbId")
     val adbUserName = appConf.getInt("predictor.adbUserName")
     val adbPassword = appConf.getInt("predictor.adbPassword")
+    val enableOutputStream = appConf.getBoolean("predictor.enableOutputStream")
+    val enableOutputADW = appConf.getBoolean("predictor.enableOutputADW")
 
     // Step 1: Read sensor data from stream
     println("Starting RealtimeRULPredictor")
@@ -90,19 +91,23 @@ object RealtimeRULPredictor {
         col("level"))
 
       // Step 6: Write predicted RUL to OCI Streaming Service
-      println(s"\nsending data to oci stream")
-      val outputStreamData = greenRUL.withColumn("eventTime", unix_timestamp())
-        .select(lit(batchId).cast(StringType).as("key"),to_json(struct("*")).as("value"))
-      Helper.ociStreamWriter(outputStreamData,bootstrapServer,outputTopics,STREAMPOOL_CONNECTION.format(streampoolId))
+      if(enableOutputStream) {
+        println(s"\nsending data to oci stream")
+        val outputStreamData = greenRUL.withColumn("eventTime", unix_timestamp())
+          .select(lit(batchId).cast(StringType).as("key"), to_json(struct("*")).as("value"))
+        Helper.ociStreamWriter(outputStreamData, bootstrapServer, outputTopics, STREAMPOOL_CONNECTION.format(streampoolId))
+      }
 
       // Step 7: Using Spark Oracle Datasource send RUL alters to Autonomous Database
-      maintenanceAlert
-        .write.format("oracle").mode(SaveMode.Append)
-        .option("adbId", adbId)
-        .option("dbtable", PREDICTED_RUL_ALERTS)
-        .option("user", adbUserName)
-        .option("password", adbPassword)
-        .save()
+      if(enableOutputADW) {
+        maintenanceAlert
+          .write.format("oracle").mode(SaveMode.Append)
+          .option("adbId", adbId)
+          .option("dbtable", PREDICTED_RUL_ALERTS)
+          .option("user", adbUserName)
+          .option("password", adbPassword)
+          .save()
+      }
     }).option("checkpointLocation", checkpointLocation)
       .trigger(Trigger.ProcessingTime(triggerIntervalInSeconds))
       .start()

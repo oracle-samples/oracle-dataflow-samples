@@ -106,7 +106,6 @@ object SensorDataSimulator {
 
 
   def main(args: Array[String]): Unit = {
-    println("Starting SensorDataSimulator")
     if (args.length == 0) {
       println("Missing configuration file argument.Please provide config.")
       sys.exit(1)
