@@ -3,6 +3,7 @@ package com.oracle.dataflow
 import com.oracle.dataflow.utils.Constants._
 import com.oracle.dataflow.utils.SparkSessionUtils.spark
 import com.oracle.dataflow.schema.EquipmentTrainingData
+import com.oracle.dataflow.utils.VaultUtils.getSecret
 import com.oracle.dataflow.utils.{ApplicationConfiguration, Helper}
 import com.typesafe.config.Config
 import org.apache.spark.ml.feature.{MinMaxScalerModel, VectorAssembler}
@@ -31,7 +32,7 @@ object RealtimeRULPredictor {
     val triggerIntervalInSeconds = appConf.getInt("predictor.triggerIntervalInSeconds")
     val adbId = appConf.getString("predictor.adbId")
     val adbUserName = appConf.getString("predictor.adbUserName")
-    val adbPassword = appConf.getString("predictor.adbPassword")
+    val secretOcid = appConf.getString("predictor.secretOcid")
     val enableOutputStream = appConf.getBoolean("predictor.enableOutputStream")
     val enableOutputADW = appConf.getBoolean("predictor.enableOutputADW")
 
@@ -100,6 +101,8 @@ object RealtimeRULPredictor {
 
       // Step 7: Using Spark Oracle Datasource send RUL alters to Autonomous Database
       if(enableOutputADW) {
+        val adbPassword  = getSecret(secretOcid)
+        println(s"password ${adbPassword}")
         maintenanceAlert
           .write.format("oracle").mode(SaveMode.Append)
           .option("adbId", adbId)

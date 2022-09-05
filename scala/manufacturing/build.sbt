@@ -1,5 +1,3 @@
-import scala.Console.in
-
 organization := "com.oracle.dataflow"
 name := "manufacturing"
 description := "Trains and deploys Remaining Useful Life (RUL) of critical equipment in production line of factory floor."
@@ -17,8 +15,6 @@ libraryDependencies ++= Seq(
   "org.apache.spark" %% "spark-sql-kafka-0-10" % sparkVersion,
   "com.oracle.oci.sdk" % "oci-java-sdk-addons-sasl" % ociSDKVersion,
   "com.typesafe" % "config" % typesafeVersion,
-  "com.oracle.oci.sdk" % "oci-java-sdk-core" % ociSDKVersion,
-  "com.oracle.oci.sdk" % "oci-java-sdk-common" % ociSDKVersion,
   "com.oracle.oci.sdk" % "oci-java-sdk-objectstorage" % ociSDKVersion,
   "com.oracle.oci.sdk" % "oci-java-sdk-secrets" % ociSDKVersion
 )
