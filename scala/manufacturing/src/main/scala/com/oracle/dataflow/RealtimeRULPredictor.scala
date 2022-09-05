@@ -29,9 +29,9 @@ object RealtimeRULPredictor {
     val streampoolId = appConf.getString("predictor.streampoolId")
     val bootstrapServer = appConf.getString("predictor.bootstrapServer")
     val triggerIntervalInSeconds = appConf.getInt("predictor.triggerIntervalInSeconds")
-    val adbId = appConf.getInt("predictor.adbId")
-    val adbUserName = appConf.getInt("predictor.adbUserName")
-    val adbPassword = appConf.getInt("predictor.adbPassword")
+    val adbId = appConf.getString("predictor.adbId")
+    val adbUserName = appConf.getString("predictor.adbUserName")
+    val adbPassword = appConf.getString("predictor.adbPassword")
     val enableOutputStream = appConf.getBoolean("predictor.enableOutputStream")
     val enableOutputADW = appConf.getBoolean("predictor.enableOutputADW")
 
