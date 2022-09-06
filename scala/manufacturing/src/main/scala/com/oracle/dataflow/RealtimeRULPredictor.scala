@@ -3,6 +3,7 @@ package com.oracle.dataflow
 import com.oracle.dataflow.utils.Constants._
 import com.oracle.dataflow.utils.SparkSessionUtils.spark
 import com.oracle.dataflow.schema.EquipmentTrainingData
+import com.oracle.dataflow.utils.CommonUtils.{printUsage, validateArgs}
 import com.oracle.dataflow.utils.VaultUtils.getSecret
 import com.oracle.dataflow.utils.{ApplicationConfiguration, Helper}
 import com.typesafe.config.Config
@@ -12,15 +13,15 @@ import org.apache.spark.sql.functions.{col, current_timestamp, from_json, lit, s
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.types.{StringType, TimestampType}
 import org.apache.spark.sql.{DataFrame, SaveMode}
+import org.apache.log4j.LogManager
+import org.apache.log4j.Logger
 
 import java.io.File
 
 object RealtimeRULPredictor {
+  val log: Logger = LogManager.getLogger(this.getClass)
   def main(args: Array[String]): Unit = {
-    if (args.length == 0) {
-      println("Missing configuration file argument.Please provide config.")
-      sys.exit(1)
-    }
+    validateArgs(args)
     val configFile = args(0)
     val appConf:Config = new ApplicationConfiguration(configFile).applicationConf
     val checkpointLocation = appConf.getString("predictor.checkpointLocation")
@@ -35,6 +36,11 @@ object RealtimeRULPredictor {
     val secretOcid = appConf.getString("predictor.secretOcid")
     val enableOutputStream = appConf.getBoolean("predictor.enableOutputStream")
     val enableOutputADW = appConf.getBoolean("predictor.enableOutputADW")
+    val enableOutputParquetTable = appConf.getBoolean("predictor.enableOutputParquetTable")
+    val enableOutputDeltaTable = appConf.getBoolean("predictor.enableOutputDeltaTable")
+    val parquetOutputPath = appConf.getString("predictor.parquetOutputPath")
+    val deltaOutputPath = appConf.getString("predictor.deltaOutputPath")
+    val assetFilter = appConf.getInt("predictor.assetFilter")
 
     // Step 1: Read sensor data from stream
     println("Starting RealtimeRULPredictor")
@@ -99,7 +105,21 @@ object RealtimeRULPredictor {
         Helper.ociStreamWriter(outputStreamData, bootstrapServer, outputTopics, STREAMPOOL_CONNECTION.format(streampoolId))
       }
 
-      // Step 7: Using Spark Oracle Datasource send RUL alters to Autonomous Database
+      // Step 7: Write parquet to object storage Service
+      if(enableOutputParquetTable) {
+        println(s"\nwriting data to object storage")
+        predictedRULData.filter(col("asset_id").leq(assetFilter)).write.mode(SaveMode.Append)
+          .partitionBy("asset_id").parquet(parquetOutputPath)
+      }
+
+      // Step 8:
+      if(enableOutputDeltaTable) {
+        println(s"\nwriting data to object storage")
+        predictedRULData.filter(col("asset_id").leq(assetFilter)).write.mode(SaveMode.Append)
+          .partitionBy("asset_id").format("delta").save(deltaOutputPath)
+      }
+
+      // Step 9: Using Spark Oracle Datasource send RUL alters to Autonomous Database
       if(enableOutputADW) {
         val adbPassword  = getSecret(secretOcid)
         println(s"password ${adbPassword}")

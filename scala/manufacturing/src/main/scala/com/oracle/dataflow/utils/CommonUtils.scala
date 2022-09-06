@@ -1,5 +1,6 @@
 package com.oracle.dataflow.utils
 
+import com.oracle.dataflow.RealtimeRULPredictor.log
 import com.oracle.dataflow.utils.Constants.{DATAFLOW_AUTH_ENV, DELEGATION, RP, SPARK_HADOOP_FS_DELEGATION_TOKEN_PATH_ENV}
 
 object CommonUtils {
@@ -16,6 +17,18 @@ object CommonUtils {
       return null
     }
     System.getenv(SPARK_HADOOP_FS_DELEGATION_TOKEN_PATH_ENV)
+  }
+
+  def printUsage(app:String): Unit = {
+    log.info("Missing configuration file argument.Please provide config.")
+    System.err.println(s"Usage: $app <oci:// config file path>")
+  }
+
+  def validateArgs(args: Array[String]): Unit = {
+    if (args.length == 0) {
+      printUsage(this.getClass.getName)
+      sys.exit(1)
+    }
   }
 
 }
