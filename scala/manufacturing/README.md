@@ -10,15 +10,16 @@ This application has set of three spark applications,
 4. DeltaTable              - DeltaTable Operations on predicted dataset
 
 ## One Click Magic Button
-
-### Prerequisites 
-
 This is a Terraform configuration that creates resources on Oracle Cloud Infrastructure for Manufacturing application.
-The Terraform code is used to create a Resource Manager stack, that creates the required resources and configures the application on the created resources.
 
+### Prerequisites
+  * Ensure you have access to MANAGE OCI Object Storage,OCI Streaming,OCI Resource Manager,OCI Autonomous Databases, 
+  OCI Logging,OCI DataFlow,OCI Policies,OCI Compartments,OCI Vault.
+
+The Terraform code is used to create a Resource Manager stack, that creates the required resources and configures the application on the created resources.
 [![Deploy to Manufacturing Application to Oracle Cloud](https://oci-resourcemanager-plugin.plugins.oci.oraclecloud.com/latest/deploy-to-oracle-cloud.svg)](https://cloud.oracle.com/resourcemanager/stacks/create?zipUrl=https://github.com/oracle-samples/oracle-dataflow-samples/raw/main/scala/manufacturing/src/manufacturing.zip)
 
-**Warning: This will help to setup the resources.Ensure you destroy the resources automically or manually if you are not using.**
+**WARNING: Ensure you destroyed the resources if you are not using.**
 
 ## Prerequisites for manual steps
 Before you begin:
