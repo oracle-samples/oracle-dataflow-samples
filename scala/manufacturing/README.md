@@ -20,7 +20,7 @@ The Terraform code is used to create a Resource Manager stack, that creates the 
 
 [![Deploy to Manufacturing Application to Oracle Cloud](https://oci-resourcemanager-plugin.plugins.oci.oraclecloud.com/latest/deploy-to-oracle-cloud.svg)](https://cloud.oracle.com/resourcemanager/stacks/create?zipUrl=https://github.com/oracle-samples/oracle-dataflow-samples/raw/main/scala/manufacturing/src/manufacturing.zip)
 
-**WARNING: Ensure you destroyed the resources if you are not using.**
+**WARNING: Ensure you destroy the resources created by this automation if you are not using it.**
 
 ## Prerequisites for manual steps
 Before you begin:
