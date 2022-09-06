@@ -17,6 +17,7 @@ This is a Terraform configuration that creates resources on Oracle Cloud Infrast
   OCI Logging,OCI DataFlow,OCI Policies,OCI Compartments,OCI Vault.
 
 The Terraform code is used to create a Resource Manager stack, that creates the required resources and configures the application on the created resources.
+
 [![Deploy to Manufacturing Application to Oracle Cloud](https://oci-resourcemanager-plugin.plugins.oci.oraclecloud.com/latest/deploy-to-oracle-cloud.svg)](https://cloud.oracle.com/resourcemanager/stacks/create?zipUrl=https://github.com/oracle-samples/oracle-dataflow-samples/raw/main/scala/manufacturing/src/manufacturing.zip)
 
 **WARNING: Ensure you destroyed the resources if you are not using.**
