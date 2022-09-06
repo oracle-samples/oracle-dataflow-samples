@@ -10,7 +10,6 @@ resource "oci_objectstorage_bucket" "df_buckets" {
   name           = each.key
   access_type    = "NoPublicAccess"
   auto_tiering = "Disabled"
-  delete_all_object_versions = true
 }
 
 data "template_file" "app_conf" {
