@@ -1,6 +1,7 @@
 package com.oracle.dataflow.utils
 
 import com.oracle.dataflow.schema.EquipmentTestData
+import com.oracle.dataflow.utils.Constants.{DATAFLOW_AUTH_ENV, DELEGATION, RP, SPARK_HADOOP_FS_DELEGATION_TOKEN_PATH_ENV}
 import com.oracle.dataflow.utils.SparkSessionUtils.spark
 import org.apache.spark.ml.evaluation.RegressionEvaluator
 import org.apache.spark.ml.feature.{MinMaxScaler, MinMaxScalerModel, VectorAssembler}
@@ -100,43 +101,37 @@ object Helper {
 
   /**
    * Write to OCI Streaming Service
-   *
    * @param ds
    * @param bootStrapServer
    * @param topics
    * @param connectionString
    */
-  def ociWriterPlain(ds: Dataset[Row], bootStrapServer: String,
-                     topics: String, connectionString: String): Unit = {
+  def ociStreamWriter(ds: Dataset[Row], bootStrapServer: String, topics: String, connectionString: String): Unit = {
     ds.write.format("kafka")
       .option("kafka.bootstrap.servers", bootStrapServer)
       .option("topic", topics)
       .option("kafka.security.protocol", "SASL_SSL")
-      // .option("kafka.sasl.mechanism", "OCI-RSA-SHA256")
-      .option("kafka.sasl.mechanism", "PLAIN")
+      .option("kafka.sasl.mechanism", "OCI-RSA-SHA256")
       .option("kafka.sasl.jaas.config", connectionString)
       .save()
   }
 
   /**
    * Read from OCI Streaming Service
-   *
    * @param bootStrapServer
    * @param topics
    * @param connectionString
    * @return
    */
-  def ociStreamingReaderPlain(bootStrapServer: String,
-                              topics: String, connectionString: String): Dataset[Row] = {
+  def ociStreamReader(bootStrapServer: String, topics: String, connectionString: String): Dataset[Row] = {
     spark.readStream
       .format("kafka")
       .option("kafka.bootstrap.servers", bootStrapServer)
       .option("subscribe", topics)
       .option("kafka.security.protocol", "SASL_SSL")
-      //.option("kafka.sasl.mechanism", "OCI-RSA-SHA256")
-      .option("kafka.sasl.mechanism", "PLAIN")
+      .option("kafka.sasl.mechanism", "OCI-RSA-SHA256")
       .option("kafka.sasl.jaas.config", connectionString)
-      .option("kafka.max.partition.fetch.bytes", 1024 * 1024) // limit request size to 1MB per partition
+      .option("kafka.max.partition.fetch.bytes", 1024 * 1024)
       .option("startingOffsets", "latest")
       .load()
   }

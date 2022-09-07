@@ -4,7 +4,6 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.SparkSession
 
 object SparkSessionUtils {
-
   val spark = getSparkSession()
 
   def getSparkSession(): SparkSession = {
@@ -16,6 +15,5 @@ object SparkSessionUtils {
   }
 
   def await = spark.streams.awaitAnyTermination
-
   def turnOffNoise = spark.sparkContext.setLogLevel("OFF")
 }
