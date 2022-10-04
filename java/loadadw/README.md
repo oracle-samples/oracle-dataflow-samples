@@ -72,6 +72,19 @@ oci data-flow application create \
     --class-name example.Example
 ```
 
+```sh
+oci data-flow application create \
+    --compartment-id <your_compartment> \
+    --display-name "Load ADW Java with format as Oracle"
+    --driver-shape VM.Standard2.1 \
+    --executor-shape VM.Standard2.1 \
+    --num-executors 1 \
+    --spark-version 3.2.1 \
+    --file-uri oci://<bucket>@<namespace>/target/loadadw-1.0-SNAPSHOT.jar \
+    --language Java \
+    --class-name cloudworld_2022.Example
+```
+
 Make note of the Application OCID produced by this command
 
 ## Run the Application using OCI Cloud Shell or OCI CLI
