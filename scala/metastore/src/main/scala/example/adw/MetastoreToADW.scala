@@ -3,15 +3,17 @@ package example.metastore
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions.{col, lit}
 
-object SampleProgram {
+object MetastoreToADW {
   def main(args: Array[String]): Unit = {
     val spark = SparkSession.builder().enableHiveSupport().getOrCreate()
 
     var OS_BUCKET = "oci://bhavya-bucket@paasdevssstest/"
     var relativeInputPath = "canary-assets/fake_contact_data.csv"
+    // TODO: Remove this
     var relativeOutputPath = "temp"
     var databaseName = "bhavya"
     var tableName = "test_table"
+    var adwDetailsObj: ADWDetails = null
 
     println("Received args -> " + args.mkString(";"))
     if (args.length > 0) {
@@ -22,6 +24,13 @@ object SampleProgram {
         databaseName = args(3).trim
         tableName = args(4).trim
       }
+      if (args.length > 5) {
+        adwDetailsObj = ADWDetails(walletPath = args(5).trim,
+          user = args(6).trim,
+          tnsName = args(7).trim,
+          secretValue = args(8).trim)
+        println("ADW details received: " + adwDetailsObj.toString)
+      }
     }
 
     println("OS_BUCKET -> " + OS_BUCKET)
@@ -30,12 +39,14 @@ object SampleProgram {
     }
 
     // Use Case 1: Read csv from object storage
+    println("Step 1: Read csv from object storage")
     val df = spark.read.option("header", "true").csv(OS_BUCKET + relativeInputPath)
     println("Reading data from object storage !")
     df.show(false)
     println("================================================================================================")
 
     // Use Case 2: Write csv data into Metastore
+    println("Step 2: Write csv data into Metastore")
     spark.sql("show databases").show(30, false)
     val databasesDf = spark.sql("show databases")
 
@@ -55,15 +66,34 @@ object SampleProgram {
     println("Wrote data in Database: " + databaseName + " ; table: " + tableName)
     println("================================================================================================")
 
-    // Use Case 3: Read data from Metastore into object storage in parquet format
+    // Use Case 3: Read data from Metastore and write into ADW
+    println("Step 3: Read data from Metastore and write into ADW")
     val tableDf = spark.sql("select * from " + databaseName + "." + tableName)
     println("Reading data from metastore !")
     tableDf.show(false)
-    val parquetOutputPath = OS_BUCKET + relativeOutputPath + "/fake_contact_data_parquet"
-    tableDf.write.mode("overwrite").parquet(parquetOutputPath)
-    println("Wrote data onto object storage !")
-    val parquetDf = spark.read.parquet(parquetOutputPath)
-    parquetDf.show(false)
-    println("================================================================================================")
+
+    if (!spark.conf.getAll.contains("spark.oracle.datasource.enabled") ||
+      spark.conf.get("spark.oracle.datasource.enabled").equalsIgnoreCase("false")) {
+      return
+    }
+    println("Writing data into ADW")
+    tableDf.write.format("oracle").options(getAdwOptionsMap(adwDetailsObj)).mode("Overwrite").save
+    println("Reading data from ADW -> ")
+    val adwDf = spark.read.format("oracle").options(getAdwOptionsMap(adwDetailsObj)).load()
+    adwDf.show(false)
+  }
+
+  def getAdwOptionsMap(adwDetailsObj: ADWDetails): Map[String, String] = {
+    Seq(("walletUri", adwDetailsObj.walletPath),
+      ("connectionId", adwDetailsObj.tnsName),
+      ("user", adwDetailsObj.user),
+      ("password", adwDetailsObj.secretValue),
+      ("dbtable", "sample")).toMap
+  }
+
+  case class ADWDetails(walletPath: String, tnsName: String, user: String, secretValue: String) {
+    override def toString: String = {
+      "walletPath: %s, tnsName: %s, user: %s, secretValue: %s".format(walletPath, tnsName, user, secretValue)
+    }
   }
 }
