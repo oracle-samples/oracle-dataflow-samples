@@ -55,7 +55,7 @@ object MetastoreToADW {
     }
     else {
       println("Database: " + databaseName + " absent, creating !")
-      spark.sql("create database " + databaseName)
+      spark.sql("create database IF NOT EXISTS " + databaseName)
       println("Successfully created database: " + databaseName)
       println("List of databases -> ")
       databasesDf.show(false)
@@ -77,6 +77,7 @@ object MetastoreToADW {
       return
     }
     println("Writing data into ADW")
+    println(getAdwOptionsMap(adwDetailsObj))
     tableDf.write.format("oracle").options(getAdwOptionsMap(adwDetailsObj)).mode("Overwrite").save
     println("Reading data from ADW -> ")
     val adwDf = spark.read.format("oracle").options(getAdwOptionsMap(adwDetailsObj)).load()
@@ -84,7 +85,8 @@ object MetastoreToADW {
   }
 
   def getAdwOptionsMap(adwDetailsObj: ADWDetails): Map[String, String] = {
-    Seq(("walletUri", adwDetailsObj.walletPath),
+    Seq(/*("walletUri", adwDetailsObj.walletPath),*/
+      ("adbId", adwDetailsObj.walletPath),
       ("connectionId", adwDetailsObj.tnsName),
       ("user", adwDetailsObj.user),
       ("password", adwDetailsObj.secretValue),
