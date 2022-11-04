@@ -9,7 +9,7 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-    <oci-java-sdk-version>2.38.0</oci-java-sdk-version>
+    <oci-java-sdk-version>2.12.1-SNAPSHOT</oci-java-sdk-version>
   </properties>
   <dependencies>
 
@@ -35,12 +35,6 @@
       <scope>provided</scope>
     </dependency>
 
-    <!--<dependency>
-      <groupId>com.oracle.oci.sdk</groupId>
-      <artifactId>oci-hdfs-connector</artifactId>
-      <version>3.3.1.0.3.7</version>
-      <scope>provided</scope>
-    </dependency>-->
     <dependency>
       <groupId>com.oracle.oci.sdk</groupId>
       <artifactId>oci-java-sdk-core</artifactId>
@@ -55,11 +49,6 @@
       <groupId>com.oracle.oci.sdk</groupId>
       <artifactId>oci-java-sdk-secrets</artifactId>
       <version>${oci-java-sdk-version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.glassfish.jersey.core</groupId>
-      <artifactId>jersey-common</artifactId>
-      <version>2.34</version>
     </dependency>
   </dependencies>
 
@@ -158,6 +147,7 @@
               <!-- Including jsr305 in the shaded jar causes a SecurityException
                 due to signer mismatch for class "javax.annotation.Nonnull" -->
               <exclude>com.google.code.findbugs:jsr305</exclude>
+              <exclude>org.glassfish.jersey.core:jersey-common</exclude>
             </excludes>
           </artifactSet>
         </configuration>
