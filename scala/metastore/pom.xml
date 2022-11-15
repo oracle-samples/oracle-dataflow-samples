@@ -9,7 +9,7 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-    <oci-java-sdk-version>2.12.1-SNAPSHOT</oci-java-sdk-version>
+    <oci-java-sdk-version>2.12.0</oci-java-sdk-version>
   </properties>
   <dependencies>
 
