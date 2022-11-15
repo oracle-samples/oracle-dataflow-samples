@@ -1,12 +1,12 @@
 package example.metastore
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions.{col, lit}
 
 object MetastoreToADW {
   def main(args: Array[String]): Unit = {
     val spark = SparkSession.builder().enableHiveSupport().getOrCreate()
-
     var OS_BUCKET = "oci://bhavya-bucket@paasdevssstest/"
     var relativeInputPath = "canary-assets/fake_contact_data.csv"
     // TODO: Remove this
@@ -85,8 +85,8 @@ object MetastoreToADW {
   }
 
   def getAdwOptionsMap(adwDetailsObj: ADWDetails): Map[String, String] = {
-    Seq(/*("walletUri", adwDetailsObj.walletPath),*/
-      ("adbId", adwDetailsObj.walletPath),
+    Seq(("walletUri", adwDetailsObj.walletPath),
+      /*("adbId", adwDetailsObj.walletPath),*/
       ("connectionId", adwDetailsObj.tnsName),
       ("user", adwDetailsObj.user),
       ("password", adwDetailsObj.secretValue),
