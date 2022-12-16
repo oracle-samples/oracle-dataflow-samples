@@ -17,19 +17,19 @@ Before you begin:
 
     Sample: spark-bigquery-with-dependencies_2.12-0.23.2.jar
     
-    [Download Spark BigQuery Jar] : (https://mvnrepository.com/artifact/com.google.cloud.spark/spark-bigquery-with-dependencies_2.12/0.23.0)
+    [Download Spark BigQuery Jar] : https://mvnrepository.com/artifact/com.google.cloud.spark/spark-bigquery-with-dependencies_2.12/0.23.0
 
 
 6. Collect below parameters for you GCP BigQuery Table.:
-		
-	A. 'project','bigquery-public-data'
-	B. 'parentProject','core-invention-366213'
-	C. 'table','bitcoin_blockchain.transactions'
-	D. "credentialsFile","./ocigcp_user_creds.json"
+
+	'project','bigquery-public-data'
+	'parentProject','core-invention-366213'
+	'table','bitcoin_blockchain.transactions'
+	"credentialsFile","./ocigcp_user_creds.json"
 	
 7. Download ADW Wallet from OCI Portal & keep the User & Password handy.
 
-	
+##
 
 ## Access GCP BigQuery Using OCI Data Science Notebook with OCI Data Flow:
 
@@ -39,9 +39,9 @@ Before you begin:
 2. Open New Notebook with DataFlow as Kernel.
 3. Now, Create livy session for OCI Data Flow & provide other required information including GCP BigQuery.
 
-		A. spark.archives : oci://demo-ds-conda-env@OSNameSpace/conda_environments/cpu/PySpark 3.2 and Data Flow/1.0/pyspark32_p38_cpu_v1#conda
-		B. spark.files : oci://demo-ds-conda-env@orasenatdctocloudcorp01/gcp_utility/BigQuery/ocigcp_user_creds.json
-		C. spark.jars : oci://demo-ds-conda-env@orasenatdctocloudcorp01/gcp_utility/BigQuery/bigquery_spark-bigquery-with-dependencies_2.12-0.23.2.jar
-		D. spark.oracle.datasource.enabled : true
+		spark.archives : oci://demo-ds-conda-env@OSNameSpace/conda_environments/cpu/PySpark 3.2 and Data Flow/1.0/pyspark32_p38_cpu_v1#conda
+		spark.files : oci://demo-ds-conda-env@OSNameSpace/gcp_utility/BigQuery/ocigcp_user_creds.json
+		spark.jars : oci://demo-ds-conda-env@OSNameSpace/gcp_utility/BigQuery/bigquery_spark-bigquery-with-dependencies_2.12-0.23.2.jar
+		spark.oracle.datasource.enabled : true
 		
-    Use ReadBigQuery_FinalNotebook.ipynb to Access GCP BigQuery Table from OCI Data Flow. And write it down to OCI Object Storage or ADW. 
+Use [ReadBigQuery_FinalNotebook.ipynb] to Access GCP BigQuery Table from OCI Data Flow. And write it down to OCI Object Storage or ADW. 
