@@ -4,7 +4,7 @@ This Blog will demonstrate how to connect GCP Bigquery from OCI DataFlow Spark N
 
 ## Prerequisites
 
-Before you begin:
+Before you begin :
 1. Assuming you already have active OCI & GCP Subscription &have access to portal. 
 
 2. Setup OCI Data Flow, OCI Object Storage Bucket and OCI Data Science Notebook.
