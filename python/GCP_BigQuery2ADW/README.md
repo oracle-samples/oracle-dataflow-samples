@@ -37,9 +37,7 @@ Before you begin:
 
 ## Access GCP BigQuery Using OCI Data Science Notebook with OCI Data Flow:
 
-1. Open OCI Data Science Session, where you have already created Conda environment for OCI Data Flow. 
-
-		[Refer] : Prerequisite Point 2.
+1. Open OCI Data Science Session, where you have already created Conda environment for OCI Data Flow.  [Refer] : Prerequisite Point 2.
 
 2. Open New Notebook with DataFlow as Kernel.
 3. Now, Create livy session for OCI Data Flow & provide other required information including GCP BigQuery.
