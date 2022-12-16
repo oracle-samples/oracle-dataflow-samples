@@ -1,0 +1,20 @@
+This Blog will demonstrate how to connect GCP Bigquery from OCI DataFlow Spark Notebook. Following that will perform some read operation on Bigquery Table using Spark & write down the resultant spark dataframe to OCI Object Storage & also on Autonomous Datawarehouse.
+
+
+Prerequisite:
+	1. Assuming you already have active OCI & GCP Subscription &have access to portal. 
+	2. Setup OCI Data Flow, OCI Object Storage Bucket and OCI Data Science Notebook.
+		Refer: https://docs.oracle.com/en-us/iaas/data-flow/using/data-flow-studio.htm
+	3. Create & download "Google API JSON Key secret OCID" for the Project where BigQuery Database is residing on GCP.
+	4. Upload the "Google API JSON Key secret OCID" to OCI Object Storage 
+		"oci://demo-bucketname@OSnamespace/gcp_utility/BigQuery/ocigcp_user_creds.json"
+		
+	5. Collect below parameters for you GCP BigQuery Table.:
+		
+		A. 'project','bigquery-public-data'
+		B. 'parentProject','core-invention-366213'
+		C. 'table','bitcoin_blockchain.transactions'
+		D. "credentialsFile","./ocigcp_user_creds.json"
+	
+	6. Download ADW Wallet from OCI Portal & keep the User & Password handy.
+	
