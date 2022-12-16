@@ -2,6 +2,8 @@
 
 This Blog will demonstrate how to connect GCP Bigquery from OCI DataFlow Spark Notebook. Following that will perform some read operation on Bigquery Table using Spark & write down the resultant spark dataframe to OCI Object Storage & also on Autonomous Datawarehouse.
 
+![Convert CSV Data to Parquet](./images/GCP_BigQuery_To_OCI_ADW.png)
+
 ## Prerequisites
 
 Before you begin :
@@ -48,3 +50,4 @@ Before you begin :
 		spark.oracle.datasource.enabled : true
 		
 Use [ReadBigQuery_FinalNotebook.ipynb] to Access GCP BigQuery Table from OCI Data Flow. And write it down to OCI Object Storage or ADW. 
+
