@@ -1,3 +1,4 @@
+/*
 resource "oci_kms_vault" "manufacturing_vault" {
     depends_on  = [oci_identity_policy.policy,oci_database_autonomous_database.autonomous_database]
     compartment_id = oci_identity_compartment.compartment.id
@@ -28,4 +29,5 @@ resource "oci_vault_secret" "manufacturing_secret" {
         name = "adbPassword"
         stage = "CURRENT"
     }
-} 
+}
+*/

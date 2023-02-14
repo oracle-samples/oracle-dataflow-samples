@@ -1,5 +1,5 @@
 resource "oci_dataflow_application" "realtime_predictor_app" {
-  depends_on  = [oci_objectstorage_object.upload_app_conf,oci_vault_secret.manufacturing_secret]
+  depends_on  = [oci_objectstorage_object.upload_app_conf]
   compartment_id = oci_identity_compartment.compartment.id
   display_name   = var.rul_realtime_predictor_app["display_name"]
   driver_shape   = var.rul_realtime_predictor_app["driver_shape"]

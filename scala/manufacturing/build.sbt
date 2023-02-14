@@ -1,7 +1,7 @@
 organization := "com.oracle.dataflow"
 name := "manufacturing"
 description := "Trains and deploys Remaining Useful Life (RUL) of critical equipment in production line of factory floor."
-version := "0.6"
+version := "0.7"
 scalaVersion := "2.12.15"
 
 val sparkVersion = "3.2.1"

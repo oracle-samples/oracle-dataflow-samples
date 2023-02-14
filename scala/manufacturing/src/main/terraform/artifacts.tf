@@ -25,7 +25,8 @@ data "template_file" "app_conf" {
     streampoolId                 = oci_streaming_stream_pool.manufacturing_stream_pool.id
     bootstrapServer              = oci_streaming_stream_pool.manufacturing_stream_pool.kafka_settings[0].bootstrap_servers
     adbId                        = oci_database_autonomous_database.autonomous_database.id
-    secretOcid                   = oci_vault_secret.manufacturing_secret.id 
+    # secretOcid                 = oci_vault_secret.manufacturing_secret.id
+    secret                       = random_string.autonomous_database_admin_password.result
     parquetOutputPath            = local.predictor_parquet_table
     deltaOutputPath              = local.predictor_delta_table 
     rul_predictor_stream         = local.rul_predictor_stream
