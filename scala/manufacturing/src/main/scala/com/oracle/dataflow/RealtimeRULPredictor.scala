@@ -70,7 +70,7 @@ object RealtimeRULPredictor {
         .withColumnRenamed("prediction","predicted_RUL")
       println(s"predicted RUL schema:")
       predictedRULData.printSchema()
-      println(s"predicted RUL sample Data:")
+        println(s"predicted RUL sample Data:")
       predictedRULData.show(5,false)
 
       // Step 5: Categorize records based on RUL

@@ -1,7 +1,7 @@
 resource "oci_streaming_stream_pool" "manufacturing_stream_pool" {
   depends_on  = [oci_identity_policy.policy]
   compartment_id = oci_identity_compartment.compartment.id
-  name           = var.stream-pool-name
+  name           = "${var.stream-pool-name}-${var.suffix}"
 
   kafka_settings {
     auto_create_topics_enable = local.auto_create_topics_enable

@@ -7,6 +7,7 @@ scalaVersion := "2.12.15"
 val sparkVersion = "3.2.1"
 val ociSDKVersion = "2.20.0"
 val typesafeVersion = "1.4.2"
+val protobufVersion = "3.16.3"
 
 libraryDependencies ++= Seq(
   "org.apache.spark" %% "spark-core" % sparkVersion % "provided",
@@ -16,7 +17,8 @@ libraryDependencies ++= Seq(
   "com.oracle.oci.sdk" % "oci-java-sdk-addons-sasl" % ociSDKVersion,
   "com.typesafe" % "config" % typesafeVersion,
   "com.oracle.oci.sdk" % "oci-java-sdk-objectstorage" % ociSDKVersion,
-  "com.oracle.oci.sdk" % "oci-java-sdk-secrets" % ociSDKVersion
+  "com.oracle.oci.sdk" % "oci-java-sdk-secrets" % ociSDKVersion,
+  "com.google.protobuf" % "protobuf-java" % protobufVersion,
 )
 
 assemblyMergeStrategy in assembly := {
@@ -29,4 +31,5 @@ assemblyMergeStrategy in assembly := {
 
 assemblyShadeRules in assembly := Seq(
   ShadeRule.zap("org.bouncycastle").inAll,
+  ShadeRule.rename("com.google.protobuf.**" -> "shade.protobuf.@1").inAll,
 )
