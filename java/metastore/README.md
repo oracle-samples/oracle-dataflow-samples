@@ -9,7 +9,6 @@ Before you begin:
 * Know the OCID of a compartment where you want to load your data and create applications.
 * (Optional, strongly recommended): Install Spark to test your code locally before deploying.
 
-
 ## Instructions
 
 1. Upload a sample CSV file to object store
