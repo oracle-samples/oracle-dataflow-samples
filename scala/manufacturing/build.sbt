@@ -1,16 +1,22 @@
 organization := "com.oracle.dataflow"
 name := "manufacturing"
 description := "Trains and deploys Remaining Useful Life (RUL) of critical equipment in production line of factory floor."
-version := "0.1"
-scalaVersion := "2.12.12"
+version := "0.6"
+scalaVersion := "2.12.15"
 
-val sparkVersion = "3.0.2"
+val sparkVersion = "3.2.1"
+val ociSDKVersion = "2.20.0"
+val typesafeVersion = "1.4.2"
 
 libraryDependencies ++= Seq(
   "org.apache.spark" %% "spark-core" % sparkVersion % "provided",
   "org.apache.spark" %% "spark-sql" % sparkVersion % "provided",
   "org.apache.spark" %% "spark-mllib" % sparkVersion % "provided",
   "org.apache.spark" %% "spark-sql-kafka-0-10" % sparkVersion,
+  "com.oracle.oci.sdk" % "oci-java-sdk-addons-sasl" % ociSDKVersion,
+  "com.typesafe" % "config" % typesafeVersion,
+  "com.oracle.oci.sdk" % "oci-java-sdk-objectstorage" % ociSDKVersion,
+  "com.oracle.oci.sdk" % "oci-java-sdk-secrets" % ociSDKVersion
 )
 
 assemblyMergeStrategy in assembly := {
@@ -21,19 +27,6 @@ assemblyMergeStrategy in assembly := {
     oldStrategy(x)
 }
 
-//unmanagedJars in Compile += file("lib/spark_datasources-1.0-SNAPSHOT.jar")
-
 assemblyShadeRules in assembly := Seq(
-  ShadeRule.rename("org.apache.http.**" -> "shaded.oracle.org.apache.http.@1").inAll,
-  ShadeRule.rename("org.apache.commons.**" -> "shaded.oracle.org.apache.commons.@1").inAll,
-  ShadeRule.rename("com.fasterxml.**" -> "shaded.oracle.com.fasterxml.@1").inAll,
-  ShadeRule.rename("com.google.**" -> "shaded.oracle.com.google.@1").inAll,
-  ShadeRule.rename("javax.ws.rs.**" -> "shaded.oracle.javax.ws.rs.@1").inAll,
-  ShadeRule.rename("org.glassfish.**" -> "shaded.oracle.org.glassfish.@1").inAll,
-  ShadeRule.rename("org.jvnet.**" -> "shaded.oracle.org.jvnet.@1").inAll,
-  ShadeRule.rename("javax.annotation.**" -> "shaded.oracle.javax.annotation.@1").inAll,
-  ShadeRule.rename("javax.validation.**" -> "shaded.oracle.javax.validation.@1").inAll,
-  ShadeRule.rename("com.oracle.bmc.hdfs.**" -> "com.oracle.bmc.hdfs.@1").inAll,
-  ShadeRule.rename("com.oracle.bmc.**" -> "shaded.com.oracle.bmc.@1").inAll,
   ShadeRule.zap("org.bouncycastle").inAll,
 )
