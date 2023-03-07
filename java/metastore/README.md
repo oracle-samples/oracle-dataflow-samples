@@ -1,6 +1,6 @@
-# Convert CSV data to Parquet
+# Read CSV data write/read from Metastore and then Write/Read from ADW
+## _Note_: This example will work in Dataflow code editor plugin and OCI Dataflow
 
-The most common first step in data processing applications, is to take data from some source and get it into a format that is suitable for reporting and other forms of analytics. In a database, you would load a flat file into the database and create indexes. In Spark, your first step is usually to clean and convert data from a text format into Parquet format. Parquet is an optimized binary format supporting efficient reads, making it ideal for reporting and analytics.
 
 Before you begin:
 
@@ -16,10 +16,9 @@ Before you begin:
 2. Customize(if required) ```src/main/java/example/adw/MetastoreToADW.java``` with the OCI path to your CSV data. The format is ```oci://<bucket>@<namespace>/path```\
   2a. Don't know what your namespace is? Run ```oci os ns get```\
   2b. Don't have the OCI CLI installed? [See](https://docs.cloud.oracle.com/en-us/iaas/Content/API/SDKDocs/cliinstall.htm) to install it.
-3. Customize ```src/main/java/example/adw/MetastoreToADW.java``` with the OCI path where you would like to save output data.
-4. Compile with MVN to generate the jar file ```metastore-1.0-SNAPSHOT.jar```.
-5. Recommended: run the sample locally/code editor to test it.
-6. Upload the JAR file ```csv_to_parquet-1.0-SNAPSHOT.jar``` to an object store bucket.
+3. Compile with MVN to generate the jar file ```metastore-1.0-SNAPSHOT.jar```.
+5. Recommended: run the sample code editor to test it.
+6. Upload the JAR file ```metastore-1.0-SNAPSHOT,jar``` to an object store bucket after testing with code editor dataflow plugin
 7. Create a Java Data Flow application pointing to the JAR file ```metastore-1.0-SNAPSHOT.jar```
   7a. Refer [Create Java App](https://docs.oracle.com/en-us/iaas/data-flow/using/dfs_data_flow_library.htm#create_java_app)
 
