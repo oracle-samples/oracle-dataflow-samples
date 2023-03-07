@@ -43,9 +43,9 @@ def oracle_datasource_example(spark):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("table", required=True)
+    parser.add_argument("--table", required=True)
     args = parser.parse_args()
-    spark = SparkSession.builder.appName("Python Spark Oracle Datasource Example").getOrCreate()
+    spark = SparkSession.builder.appName("Python Spark Oracle Datasource Example").enableHiveSupport().getOrCreate()
 
     # TODO: Set all these variables.
     INPUT_PATH = "oci://<bucket>@<tenancy>/fake_data.csv"
