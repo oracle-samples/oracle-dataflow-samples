@@ -73,5 +73,23 @@ Arguments: oci://<location>/samplecsv.csv oci://<location>/iceberg/spark-Iceberg
 Main class : iceberg_sample.py
 Arguments: oci://<location>/samplecsv.csv oci://<location>/iceberg/spark-IcebergTable 
 ```
+### Iceberg library dependencies and spark configurations can be added to sparkSubmit command
+
+    Set the below iceberge spark configurations and provide catalog path
+    
+    spark = SparkSession\
+        .builder\
+        .appName("Iceberg Simulation")\
+        .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")\
+        .config("spark.sql.catalog.dev", "org.apache.iceberg.spark.SparkCatalog")\
+        .config("spark.hadoop.fs.AbstractFileSystem.oci.impl", "com.oracle.bmc.hdfs.Bmc")\
+        .config("spark.sql.catalog.dev.type", "hadoop")\
+        .config("spark.sql.catalog.dev.warehouse", "oci://<location>/iceberg/")\
+
+sample spark submit command with iceberg dependency 
+
+    --packages org.apache.iceberg:iceberg-spark-runtime-3.2_2.12:1.1.0
+    oci://<location>/iceberg/iceberg.py oci://<location>/iceberg/samplecsv.csv oci://<location>/iceberg/db/icebergTablePy 
+
 
 `Note: Build jar artifact from "mvn clean install`
