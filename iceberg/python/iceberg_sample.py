@@ -37,7 +37,7 @@ if __name__ == "__main__":
         .config("spark.sql.catalog.dev", "org.apache.iceberg.spark.SparkCatalog") \
         .config("spark.hadoop.fs.AbstractFileSystem.oci.impl", "com.oracle.bmc.hdfs.Bmc") \
         .config("spark.sql.catalog.dev.type", "hadoop") \
-        .config("spark.sql.catalog.dev.warehouse", "oci://<location>/iceberg/") \
+        .config("spark.sql.catalog.dev.warehouse", "oci://mk-test-dev18@paasdevssstest/iceberg/") \
         .getOrCreate()
 
 
