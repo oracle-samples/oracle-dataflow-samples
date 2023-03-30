@@ -42,19 +42,6 @@ if __name__ == "__main__":
 
 
     sqlContext = SQLContext(spark.sparkContext)
-    # Create a Vertex DataFrame with unique ID column "id"
-    v = sqlContext.createDataFrame([
-        ("a", "Alice", 34),
-        ("b", "Bob", 36),
-        ("c", "Charlie", 30),
-    ], ["id", "name", "age"])
-    # Create an Edge DataFrame with "src" and "dst" columns
-    e = sqlContext.createDataFrame([
-        ("a", "b", "friend"),
-        ("b", "c", "follow"),
-        ("c", "b", "follow"),
-    ], ["src", "dst", "relationship"])
-    # Create a GraphFrame
 
     csvFilePath = sys.argv[1]
     icebergTablePath = sys.argv[2]
@@ -73,6 +60,7 @@ if __name__ == "__main__":
     df1.show()
 
     print("\nHistory for snapshot-id" + icebergTablePath)
+    # provide valid snapshot id from the metadata.json file
     df2 = spark.read.format("iceberg").option("snapshot-id", 3004923173007188796).load(icebergTablePath)
     df2.show()
 

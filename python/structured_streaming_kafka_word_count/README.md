@@ -40,7 +40,11 @@ optional arguments:
   --raw-stream RAW_STREAM
   --stream-username STREAM_USERNAME
 ```
-4. Using `python/structured_streaming_java_dependencies_for_python` create `archive.zip`
+4. Provide your dependency using any of the below suitable option.
+
+    * Use `--packages` option or `spark.jars.packages` spark configuration. Application running in private endpoint has to allow traffic from private subnet to internet to download package (confirm with PM). 
+    * Provide object storage jar location in `--jars` or `spark.jars` as comma seperated list.  
+    * Use `python/structured_streaming_java_dependencies_for_python` create `archive.zip`.
 5. First start Structured Streaming app (StructuredKafkaWordCount) locally or in the cloud.
 6. Second start data producer oss-producer-from-file.py (`python3 oss-producer-from-file.py`) locally or in the cloud.
 
