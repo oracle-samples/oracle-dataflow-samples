@@ -3,7 +3,12 @@ This is a Maven project to build an uber (all in one) JAR that contains all the 
 
 See [Best Practices for Building Python Spark Streaming Applications](https://docs.cloud.oracle.com/en-us/iaas/data-flow/using/spark-streaming.htm#streaming-build-python-app-tips)
 # Content
-Fully includes
+Provide dependency using any of the below suitable option.
+
+    * Use `--packages` option or `spark.jars.packages` spark configuration. Application running in private endpoint has to allow traffic from private subnet to internet to download package (confirm with PM). 
+    * Provide object storage jar location in `--jars` or `spark.jars` as comma seperated list.  
+    * Create dependency `archive.zip`.
+
 ```sh
 groupId = com.oracle.oci.sdk
 artifactId = oci-java-sdk-addons-sasl
@@ -34,9 +39,9 @@ Relocates namespaces
 * com.google -> com.shaded.google
 * com.oracle.bmc -> com.shaded.oracle.bmc (except com.oracle.bmc.auth.sasl.*)
 
-# Instructions
-1. Compile an uber jar.
-2. Pack uber jar into archive.zip
+# Instructions to create a application jar
+1. Provide dependency in any of the above suitable options.
+2. Compile source code and create a application jar ( In case of Fat jar dependency, Pack uber jar into archive.zip )
 
 ## To Compile
 ```sh
