@@ -11,7 +11,7 @@
 	<properties>
 		<oci-java-sdk-version>1.15.4</oci-java-sdk-version>
 		<oci-java-sdk-version>1.25.2</oci-java-sdk-version>
-		<spark.version>3.0.2</spark.version>
+		<spark.version>3.4.0</spark.version>
 		<oci-hdfs-version>3.2.1.3</oci-hdfs-version>
 		<ojdbc.version>18.3</ojdbc.version>
 		<maven.compiler.source>1.8</maven.compiler.source>
