@@ -41,6 +41,10 @@ For step-by-step instructions, see the README files included with each sample.
 
 These samples show how to use the OCI Data Flow service and are meant to be deployed to and run from Oracle Cloud. You can optionally test these applications locally before you deploy them.  When they are ready, you can deploy them to Data Flow without any need to reconfigure them, make code changes, or apply deployment profiles.To test these applications locally, Apache Spark needs to be installed. Refer to section on how to set the Prerequisites before you deploy the application locally [Setup locally](https://docs.oracle.com/en-us/iaas/data-flow/data-flow-tutorial/develop-apps-locally/front.htm).
 
+### MLFlow Tracking Server
+
+Set up MLFlow Tracking Server: Refer to this section [dataflow-mlflow-integration](https://github.com/nilayp2107/oracle-dataflow-samples/dataflow-mlflow-integration)
+
 ## Install Spark
 
 To install Spark, visit [spark.apache.org](https://spark.apache.org/docs/latest/api/python/getting_started/index.html)
