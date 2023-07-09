@@ -38,4 +38,4 @@ You need to provide the corresponding values for each option.
 To set the MLflow and Docker variables, you can run the script with the appropriate options and values. For example:
 
 ```bash
-./mlflow.sh -a /path/to/artifact/root -s /path/to/artifacts/destination -u mysql://user:password@hostname:port/database -i mydockerimage:latest
+./mlflow.sh -a /path/to/artifact/root -s /path/to/artifacts/destination -u mysql+mysqlconnector://{username}:{password}@{host}:{db_port}/{db_name} -i mydockerimage:latest
