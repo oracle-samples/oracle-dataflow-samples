@@ -31,12 +31,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Set default values if not provided
-MLFLOW_DEFAULT_ARTIFACT_ROOT=${MLFLOW_DEFAULT_ARTIFACT_ROOT:-oci://nilay-mlflow@paasdevssspre/}
-MLFLOW_ARTIFACTS_DESTINATION=${MLFLOW_ARTIFACTS_DESTINATION:-oci://nilay-mlflow@paasdevssspre/}
-MLFLOW_BACKEND_STORE_URI=${MLFLOW_BACKEND_STORE_URI:-mysql+mysqlconnector://admin:Mlflow%402023@mysqldb.sub01292340360.datasciencevcn.oraclevcn.com:3306/mlflow}
-DOCKER_IMAGE=${DOCKER_IMAGE:-phx.ocir.io/paasdevssspre/oci-mlflow:latest}
-
 # Run the docker command
 sudo docker run --rm \
   --name oci-mlflow \
