@@ -25,7 +25,7 @@ locals {
   source_region = "us-ashburn-1"
   artifacts_prefix = "demo/artifacts"
   data_prefix = "demo/data"
-  streaming_artifact_name = "manufacturing-assembly-0.6.jar"
+  streaming_artifact_name = "manufacturing-assembly-0.7.jar"
   delta_artifact_name = "predicted_rul_delta.py"
   train_sensors_name = "train_sensors.txt"
   test_sensors_name = "test_sensors.txt"

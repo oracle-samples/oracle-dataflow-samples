@@ -10,6 +10,9 @@ variable "user_ocid" {
 variable "compartment_ocid" {
 }
 
+variable "suffix" {
+}
+
 variable "region" {
   default = "us-ashburn-1"
 }
