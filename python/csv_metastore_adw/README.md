@@ -17,19 +17,19 @@ Upload a sample CSV file to OCI object store.
 
 ## Application Setup
 
-Customize ```csvToMetastoreToADW.py``` with:
-
-* Set INPUT_PATH to the OCI path of your CSV data.
-* Set PASSWORD of ADW instance.
-* Set databaseName db in ADW where data is to be written.
-* Set tableName table name argument in ADW where data is to be written. 
-* Set CONNECTION_ID to a TNS name valid for the database.
-* Set USER to the user who generated the wallet file.
-* Set WALLET_PATH to the path on object store for the wallet.
+Customize(if required) ```csvToMetastoreToADW.py``` with:
 
   Test the Application Locally (recommended):
   You can test the application in code editor data flow plugin locally using Run locally:
-
+  ```sh
+  Language: Python
+  FileName: csvToMetastoreToADW.py
+  Enable Spark Oracle data source property
+  Enable Spark Oracle metastore property
+  Select compartment
+  Select metastore
+  Arguments: --table <metastore & adw table table name> --database <metastore database name> --input <oci://bucket@namespace/sample.csv> --walletUri <oci://bucket@namespace/Wallet.zip> --user <user who generated the wallet file> --password <password to the database> --connection <TNS name valid for the database>
+  ```
 ## Deploy and Run the Application
 
 * Copy csvToMetastoreToADW.py to object store or upload csvToMetastoreToADW.py from Dataflow upload artifact utility.
@@ -51,7 +51,7 @@ oci data-flow application create \
     --num-executors 1 \
     --spark-version 2.4.4 \
     --file-uri oci://<bucket>@<namespace>/csvToMetastoreToADW.py \
-    --arguments --table <table_name>
+    --arguments --table <metastore & adw table table name> --database <metastore database name> --input <oci://bucket@namespace/sample.csv> --walletUri <oci://bucket@namespace/Wallet.zip> --user <user who generated the wallet file> --password <password to the database> --connection <TNS name valid for the database>
     --language Python
 oci data-flow run create \
     --application-id <application_ocid> \

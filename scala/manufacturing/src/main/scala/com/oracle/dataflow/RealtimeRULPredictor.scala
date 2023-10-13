@@ -33,7 +33,8 @@ object RealtimeRULPredictor {
     val triggerIntervalInSeconds = appConf.getInt("predictor.triggerIntervalInSeconds")
     val adbId = appConf.getString("predictor.adbId")
     val adbUserName = appConf.getString("predictor.adbUserName")
-    val secretOcid = appConf.getString("predictor.secretOcid")
+    // val secretOcid = appConf.getString("predictor.secretOcid")
+    val secret = appConf.getString("predictor.secret")
     val enableOutputStream = appConf.getBoolean("predictor.enableOutputStream")
     val enableOutputADW = appConf.getBoolean("predictor.enableOutputADW")
     val enableOutputParquetTable = appConf.getBoolean("predictor.enableOutputParquetTable")
@@ -69,7 +70,7 @@ object RealtimeRULPredictor {
         .withColumnRenamed("prediction","predicted_RUL")
       println(s"predicted RUL schema:")
       predictedRULData.printSchema()
-      println(s"predicted RUL sample Data:")
+        println(s"predicted RUL sample Data:")
       predictedRULData.show(5,false)
 
       // Step 5: Categorize records based on RUL
@@ -121,7 +122,7 @@ object RealtimeRULPredictor {
 
       // Step 9: Using Spark Oracle Datasource send RUL alters to Autonomous Database
       if(enableOutputADW) {
-        val adbPassword  = getSecret(secretOcid)
+        val adbPassword  = secret
         println(s"password ${adbPassword}")
         maintenanceAlert
           .write.format("oracle").mode(SaveMode.Append)
