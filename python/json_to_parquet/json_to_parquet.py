@@ -13,9 +13,12 @@ from pyspark.sql import SparkSession, SQLContext
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-p','--profile_name', help='OCI Profile', required=False)
-    parser.add_argument('-i','--input-path', help='Input file or file path', required=True)
-    parser.add_argument('-o','--output-path', help='Output file path', required=True)
+    parser.add_argument('-p', '--profile_name',
+                        help='OCI Profile', required=False)
+    parser.add_argument('-i', '--input-path',
+                        help='Input file or file path', required=True)
+    parser.add_argument('-o', '--output-path',
+                        help='Output file path', required=True)
 
     args = parser.parse_args()
 
@@ -30,7 +33,9 @@ def main():
     input_dataframe.write.mode("overwrite").parquet(args.output_path)
 
     # Show on the console that something happened.
-    print("Successfully converted {} rows to Parquet and wrote to {}.".format(input_dataframe.count(), args.output_path))
+    print("Successfully converted {} rows to Parquet and wrote to {}.".format(
+        input_dataframe.count(), args.output_path))
+
 
 def get_dataflow_spark_session(
     app_name="DataFlow_JSON2Parquet", file_location=None, profile_name=None, spark_config={}
@@ -60,8 +65,15 @@ def get_dataflow_spark_session(
             oci_config = oci.config.from_file(
                 file_location=file_location, profile_name=profile_name
             )
+        except oci.exceptions.ConfigFileNotFound as e:
+            print(
+                "OCI config file not found. Please ensure the file exists and is accessible.")
+            raise e
+        except oci.exceptions.InvalidConfig as e:
+            print("Invalid OCI config. Please check your configuration settings.")
+            raise e
         except Exception as e:
-            print("You need to set up your OCI config properly to run locally")
+            print("An unexpected error occurred.")
             raise e
         conf = SparkConf()
         conf.set("fs.oci.client.auth.tenantId", oci_config["tenancy"])
@@ -70,10 +82,13 @@ def get_dataflow_spark_session(
         conf.set("fs.oci.client.auth.pemfilepath", oci_config["key_file"])
         conf.set(
             "fs.oci.client.hostname",
-            "https://objectstorage.{0}.oraclecloud.com".format(oci_config["region"]),
+            "https://objectstorage.{0}.oraclecloud.com".format(
+                oci_config["region"]),
         )
-        conf.set("fs.oci.client.apache.connection.closing.strategy", "immediate")  # Large Files with partial reads
-        spark_builder = SparkSession.builder.appName(app_name).config(conf=conf)
+        conf.set("fs.oci.client.apache.connection.closing.strategy",
+                 "immediate")  # Large Files with partial reads
+        spark_builder = SparkSession.builder.appName(
+            app_name).config(conf=conf)
 
     # Add in extra configuration.
     for key, val in spark_config.items():
@@ -88,9 +103,7 @@ def in_dataflow():
     """
     Determine if we are running in OCI Data Flow by checking the environment.
     """
-    if os.environ.get("HOME") == "/home/dataflow":
-        return True
-    return False
+    return os.environ.get("HOME") == "/home/dataflow"
 
 
 if __name__ == "__main__":
