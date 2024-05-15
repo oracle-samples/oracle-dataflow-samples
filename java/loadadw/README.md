@@ -14,6 +14,8 @@ Before you begin:
    * Download a Java 8 compatible (ojdbc8) [JDBC driver](https://www.oracle.com/database/technologies/appdev/jdbc-downloads.html)
    * Install the required JARs into your local environment
 
+Note: For Spark version > 3.5.0 version replace example.OboTokenClientConfigurator with example.OboTokenClientConfiguratorV2
+
    On Mac/Linux:
 
   ```sh
