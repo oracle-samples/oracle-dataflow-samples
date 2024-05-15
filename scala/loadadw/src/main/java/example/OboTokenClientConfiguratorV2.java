@@ -20,10 +20,10 @@ import javax.ws.rs.Priorities;
  * Customize the SDK underlying REST client to use the on-behalf-of token when running on
  * Data Flow.
  */
-public class OboTokenClientConfiguratorV2 extends DefaultConfigurator {
+public class OboTokenClientConfigurator extends DefaultConfigurator {
   private final String delegationTokenPath;
 
-  public OboTokenClientConfiguratorV2(String delegationTokenPath) {
+  public OboTokenClientConfigurator(String delegationTokenPath) {
     super();
     this.delegationTokenPath = delegationTokenPath;
   }
