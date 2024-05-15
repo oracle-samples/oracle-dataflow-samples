@@ -18,6 +18,8 @@
 
 	<properties>
 		<oci-java-sdk-version>1.15.4</oci-java-sdk-version>
+		<!--uncomment below property for spark 3.5.0 and comment above-->
+		<!--oci-java-sdk-version>3.34.1</oci-java-sdk-version-->
 	</properties>
 
 	<dependencies>
@@ -182,6 +184,15 @@
 							<exclude>com.google.code.findbugs:jsr305</exclude>
 						</excludes>
 					</artifactSet>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<configuration>
+					<excludes>
+						<exclude>**/example/OboTokenClientConfiguratorV2.java</exclude>
+					</excludes>
 				</configuration>
 			</plugin>
 		</plugins>

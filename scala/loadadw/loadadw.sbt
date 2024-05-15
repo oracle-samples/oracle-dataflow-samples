@@ -34,3 +34,5 @@ assemblyShadeRules in assembly := Seq(
   ShadeRule.rename("com.oracle.bmc.**" -> "shaded.com.oracle.bmc.@1").inAll,
   ShadeRule.zap("org.bouncycastle").inAll,
 )
+
+unmanagedSources / excludeFilter := HiddenFileFilter || "OboTokenClientConfiguratorV2.java"
