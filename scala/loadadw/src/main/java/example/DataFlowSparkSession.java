@@ -104,9 +104,9 @@ public class DataFlowSparkSession {
 				System.out.println("No delegation token ****** Using resource principal");
 			}
 		} else {
-			keysToCopy = Arrays.asList("fs.oci.client.auth.tenantId", "fs.oci.client.auth.userId",
-					"fs.oci.client.auth.fingerprint", "fs.oci.client.auth.pemfilepath", "fs.oci.client.hostname");
-		}
+			keysToCopy = Arrays.asList("spark.hadoop.fs.oci.client.auth.tenantId", "spark.hadoop.fs.oci.client.auth.userId",
+					"spark.hadoop.fs.oci.client.auth.fingerprint", "spark.hadoop.fs.oci.client.auth.pemfilepath", "spark.hadoop.fs.oci.client.hostname");
+				}
 		for (String entry : keysToCopy) {
 			String configuration = conf.get(entry);
 
