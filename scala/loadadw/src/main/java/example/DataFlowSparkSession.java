@@ -7,6 +7,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.NoSuchElementException;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.spark.SparkConf;
@@ -18,7 +19,7 @@ import com.oracle.bmc.auth.ConfigFileAuthenticationDetailsProvider;
 
 /*
  * Data Flow helper to create a Spark session.
- * 
+ *
  * If running locally, the Spark session is configured to access OCI using an API key.
  */
 public class DataFlowSparkSession {
@@ -27,6 +28,17 @@ public class DataFlowSparkSession {
 			return true;
 		}
 		return false;
+	}
+
+	public static boolean isDelegationToken(SparkSession spark) {
+		SparkConf conf = spark.sparkContext().getConf();
+		try {
+			conf.get("spark.hadoop.fs.oci.client.auth.delegationTokenPath");
+			return true;
+		}
+		catch (NoSuchElementException ex) {
+			return false;
+		}
 	}
 
 	public static SparkSession getSparkSession(String appName) throws IOException {
@@ -78,15 +90,26 @@ public class DataFlowSparkSession {
 		SparkConf conf = spark.sparkContext().getConf();
 		Configuration config = new Configuration();
 		List<String> keysToCopy;
+		keysToCopy = null;
 		if (isRunningInDataFlow()) {
-			keysToCopy = Arrays.asList("fs.oci.client.auth.delegationTokenPath", "fs.oci.client.custom.client",
-					"fs.oci.client.custom.authenticator", "fs.oci.client.hostname");
+			if (isDelegationToken(spark)){
+				keysToCopy = Arrays.asList( "fs.oci.client.custom.client",
+						"fs.oci.client.custom.authenticator", "fs.oci.client.hostname",
+						"spark.hadoop.fs.oci.client.auth.delegationTokenPath");
+			} else {
+				keysToCopy = Arrays.asList (
+						"spark.hadoop.fs.oci.client.custom.authenticator",
+						"spark.hadoop.fs.oci.client.hostname"
+				);
+				System.out.println("No delegation token ****** Using resource principal");
+			}
 		} else {
-			keysToCopy = Arrays.asList("fs.oci.client.auth.tenantId", "fs.oci.client.auth.userId",
-					"fs.oci.client.auth.fingerprint", "fs.oci.client.auth.pemfilepath", "fs.oci.client.hostname");
-		}
+			keysToCopy = Arrays.asList("spark.hadoop.fs.oci.client.auth.tenantId", "spark.hadoop.fs.oci.client.auth.userId",
+					"spark.hadoop.fs.oci.client.auth.fingerprint", "spark.hadoop.fs.oci.client.auth.pemfilepath", "spark.hadoop.fs.oci.client.hostname");
+				}
 		for (String entry : keysToCopy) {
-			String configuration = conf.get(entry, "");
+			String configuration = conf.get(entry);
+
 			if ("".equals(configuration)) {
 				configuration = conf.get("spark.hadoop." + entry, "");
 			}
@@ -94,8 +117,10 @@ public class DataFlowSparkSession {
 				throw new RuntimeException("Missing configuration " + entry);
 			}
 
+			if (entry.startsWith("spark.hadoop")) { entry = entry.substring(13); }
 			config.set(entry, configuration);
 		}
 		return config;
 	}
+
 }
