@@ -90,3 +90,63 @@ oci data-flow run create \
     --application-id <application_ocid> \
     --display-name "Load ADW Java"
 ```
+## Additional Applications 
+
+### Check Remote Bucket
+This application is used to verify a remote bucket that can be accessible by a resource principal only. 
+Ensure policy statement allows a client tenant is able to access the service tenancy buckets for instance:
+#### Client tenancy
+```sh
+define tenancy <service_tenant> as ocid1.tenancy.oc1..aaaaaaa.....
+admit any-user of tenancy <service_tenant> to read buckets in tenancy where ALL {request.principal.type = 'dataflowrun'}
+admit any-user of tenancy <service_tenant> to read objects in tenancy where ALL {request.principal.type = 'dataflowrun'}
+admit any-user of tenancy <service_tenant> to inspect compartments in tenancy where ALL {request.principal.type = 'dataflowrun'}
+```
+#### Service tenancy
+```sh
+define tenancy <client_tenant> as ocid1.tenancy.oc1..aaaaaaaavn3vhsyrj46hucx4h533lgtnitcydmwypxxsdq2g42cskqpxxdoa
+Endorse any-user to manage buckets in tenancy <client_tenant> where ALL {request.principal.type = 'dataflowrun'}
+Endorse any-user to inspect compartments in tenancy <client_tenant> where ALL {request.principal.type = 'dataflowrun'}
+Endorse any-user to manage objects in tenancy <client_tenant> where ALL {request.principal.type = 'dataflowrun'}
+```
+To execute from the command line just specify the class example.checkRemoteBucket and pass the remote bucket to be tested, for instance:
+```sh
+oci data-flow application create \
+    --compartment-id <your_compartment> \
+    --display-name "Check Remote Bucket"
+    --driver-shape VM.Standard2.1 \
+    --executor-shape VM.Standard2.1 \
+    --num-executors 1 \
+    --spark-version 3.5.0 \
+    --file-uri oci://<bucket>@<namespace>/target/loadadw-1.0-SNAPSHOT.jar \
+    --language Scala \
+    --class-name example.checkRemoteBucket
+    --parameters oci://<remote bucket>@<remote tenancy namespace>/
+```
+### Private Endpoint Test
+Before you run a Dataflow application using a Private Endpoint, you may wonder to quickly test the connectivity. This next example provides a simple way to validate that. 
+To do so, create an application using the class ```example.PrivateEndpointTest``` and pass the FQDN and port number the application needs to reach using the Dataflow Private Endpoint.
+For instance:
+```sh
+oci data-flow application create \
+    --compartment-id <your_compartment> \
+    --display-name "Test Dataflow PE"
+    --driver-shape VM.Standard2.1 \
+    --executor-shape VM.Standard2.1 \
+    --num-executors 1 \
+    --spark-version 3.5.0 \
+    --file-uri oci://<bucket>@<namespace>/target/loadadw-1.0-SNAPSHOT.jar \
+    --language Scala \
+    --class-name example.PrivateEndpointTest
+    --parameters p3aokzam.adb.us-phoenix-1.oraclecloud.com 1522
+```
+The application stdout will display the result of the test, for instance:
+```
+Error resolving FQDN 'p3aokzam.adb.us-phoenix-1.oraclecloud.com': p3aokzam.adb.us-phoenix-1.oraclecloud.com: Name or service not known
+Failed to resolve FQDN 'p3aokzam.adb.us-phoenix-1.oraclecloud.com'. Skipping connectivity test.
+```
+Or a positive resolution and connectivity as such:
+```
+FQDN 'p3aokzam.adb.us-phoenix-1.oraclecloud.com' resolved to IP '255.33.36.1'. Testing connectivity...
+Success: Able to connect to p3aokzam.adb.us-phoenix-1.oraclecloud.com (255.33.36.1) on port 1522.
+```
