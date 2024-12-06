@@ -139,6 +139,7 @@ oci data-flow application create \
     --language Scala \
     --class-name example.PrivateEndpointTest
     --parameters p3aokzam.adb.us-phoenix-1.oraclecloud.com 1522
+    --private-endpoint-id <Dataflow PrivateEndpoint OCID>
 ```
 The application stdout will display the result of the test, for instance:
 ```
