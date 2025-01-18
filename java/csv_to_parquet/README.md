@@ -11,20 +11,22 @@ Before you begin:
 * Ensure your tenant is configured according to the instructions to [setup admin](https://docs.cloud.oracle.com/en-us/iaas/data-flow/using/dfs_getting_started.htm#set_up_admin)
 * Know your object store namespace.
 * Know the OCID of a compartment where you want to load your data and create applications.
+* (Optional) Set up [OCI CLI](https://docs.oracle.com/en-us/iaas/Content/API/Concepts/cliconcepts.htm) with the necessary privileges to read from and write to the bucket to run the example locally
 * (Optional, strongly recommended): Install Spark to test your code locally before deploying.
 
 ## Instructions
 
 1. Upload a sample CSV file to object store
 2. Customize ```src/main/java/example/Example.java``` with the OCI path to your CSV data. The format is ```oci://<bucket>@<namespace>/path```
-  2a. Don't know what your namespace is? Run ```oci os ns get```
-  2b. Don't have the OCI CLI installed? [See](https://docs.cloud.oracle.com/en-us/iaas/Content/API/SDKDocs/cliinstall.htm) to install it.
+   - Don't know what your namespace is? Run ```oci os ns get```
+   - Don't have the OCI CLI installed? [See](https://docs.cloud.oracle.com/en-us/iaas/Content/API/SDKDocs/cliinstall.htm) to install it.
 3. Customize ```src/main/java/example/Example.java``` with the OCI path where you would like to save output data.
 4. Compile with MVN to generate the jar file ```csv_to_parquet-1.0-SNAPSHOT.jar```.
 5. Recommended: run the sample locally to test it.
+   - Uncomment the additional plugin configuration in `pom.xml` to package Example app with all its dependencies
 6. Upload the JAR file ```csv_to_parquet-1.0-SNAPSHOT.jar``` to an object store bucket.
 7. Create a Java Data Flow application pointing to the JAR file ```csv_to_parquet-1.0-SNAPSHOT.jar```
-  7a. Refer [Create Java App](https://docs.oracle.com/en-us/iaas/data-flow/using/dfs_data_flow_library.htm#create_java_app)
+   - Refer [Create Java App](https://docs.oracle.com/en-us/iaas/data-flow/using/dfs_data_flow_library.htm#create_java_app)
 
 ## To Compile
 
@@ -35,7 +37,7 @@ mvn package
 ## To Test Locally
 
 ```sh
-spark-submit --class example.Example target/csv_to_parquet-1.0-SNAPSHOT.jar
+spark-submit --class example.Example target/csv_to_parquet-1.0-SNAPSHOT-jar-with-dependencies.jar
 ```
 
 ## To use OCI CLI to run the Java Application

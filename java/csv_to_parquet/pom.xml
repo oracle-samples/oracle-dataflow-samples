@@ -58,6 +58,37 @@
 					<target>${maven.compiler.target}</target>
 				</configuration>
 			</plugin>
+
+
+			<!-- Uncomment to Package the Example App with All Its Dependencies: Some dependencies listed
+			above are in the "provided" scope, meaning they will be supplied by OCI at runtime. However,
+			these dependencies are not available when running the application locally. -->
+
+			<!-- <plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-assembly-plugin</artifactId>
+				<version>3.3.0</version>
+				<configuration>
+					<archive>
+						<manifest>
+							<mainClass>example.Example</mainClass>
+						</manifest>
+					</archive>
+					<descriptorRefs>
+						<descriptorRef>jar-with-dependencies</descriptorRef>
+					</descriptorRefs>
+				</configuration>
+				<executions>
+					<execution>
+						<id>make-assembly</id>
+						<phase>package</phase>
+						<goals>
+							<goal>single</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin> -->
+
 		</plugins>
 	</build>
 </project>
