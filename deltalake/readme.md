@@ -71,3 +71,10 @@ Main class : com.oracle.delta.GenerateCSVData
 Arguments: oci://<location>/samplecsv.csv oci://<location>/delta/spark-DeltaTable oci://<location>/delta/spark-ParquetToDeltaTable <sleepTimeInSec> <totalRuns>
 ```
 `Note: Build jar artifact from "mvn clean install`
+
+5. OCI Dataflow logging [PrintLog](https://github.com/oracle-samples/oracle-dataflow-samples/blob/main/deltalake/scala/src/main/scala/com/oracle/delta/PrintLog.scala)
+```
+Main class : com.oracle.delta.SimpleSparkApp
+Arguments: oci://<location>/samplecsv.csv oci://<location>/delta/spark-DeltaTable
+```
+`Note: Build jar artifact from "mvn package or sbt package"` 
