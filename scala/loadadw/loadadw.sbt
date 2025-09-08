@@ -6,10 +6,10 @@ scalaVersion := "2.11.0"
 libraryDependencies ++= Seq(
   "org.apache.spark" %% "spark-core" % "2.4.4" % "provided",
   "org.apache.spark" %% "spark-sql" % "2.4.4" % "provided",
-  "com.oracle.oci.sdk" % "oci-hdfs-connector" % "2.9.2.1" % "provided",
-  "com.oracle.oci.sdk" % "oci-java-sdk-core" % "1.15.4" % "provided",
-  "com.oracle.oci.sdk" % "oci-java-sdk-objectstorage" % "1.15.4" % "provided",
-  "com.oracle.oci.sdk" % "oci-java-sdk-secrets" % "1.15.4",
+  "com.oracle.oci.sdk" % "oci-hdfs-connector" % "3.3.4.1.4.1" % "provided",
+  "com.oracle.oci.sdk" % "oci-java-sdk-core" % "3.34.1" % "provided",
+  "com.oracle.oci.sdk" % "oci-java-sdk-objectstorage" % "3.34.1" % "provided",
+  "com.oracle.oci.sdk" % "oci-java-sdk-secrets" % "3.34.1",
 )
 
 assemblyMergeStrategy in assembly := {
