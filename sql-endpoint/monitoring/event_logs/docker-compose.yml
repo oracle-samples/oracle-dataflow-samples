@@ -1,0 +1,69 @@
+version: "3.9"
+
+services:
+  spark-history-server:
+    build:
+      context: ./spark-shs-prep
+      dockerfile: Dockerfile
+    image: spark-shs-oci:latest
+    container_name: spark-history-server
+
+    environment:
+      # ── OCI — required ──────────────────────────────────────
+      OCI_NAMESPACE:      ${OCI_NAMESPACE}
+      OCI_BUCKET:         ${OCI_BUCKET}
+      OCI_REGION:         ${OCI_REGION}
+
+      # ── OCI — auth ──────────────────────────────────────────
+      # api_key | security_token | instance_principal | resource_principal
+      OCI_CLI_AUTH:       ${OCI_CLI_AUTH:-api_key}
+      OCI_PROFILE:        ${OCI_PROFILE:-DEFAULT}
+      OCI_CONFIG_FILE:    ${OCI_CONFIG_FILE:-/root/.oci/config}
+
+      # ── OCI — optional ──────────────────────────────────────
+      OCI_PREFIX:         ${OCI_PREFIX:-}
+
+      # ── Log preparer ────────────────────────────────────────
+      OUTPUT_DIR:         /shs-logs
+      FLUENT_BIT_WRAPPED: ${FLUENT_BIT_WRAPPED:-auto}
+      WATCH_MODE:         ${WATCH_MODE:-true}
+      POLL_INTERVAL:      ${POLL_INTERVAL:-300}
+      KEEP_RAW:           ${KEEP_RAW:-false}
+      DEBUG:              ${DEBUG:-false}
+
+      # ── Spark History Server ─────────────────────────────────
+      SHS_PORT:                   ${SHS_PORT:-18080}
+      SHS_MAX_APPLICATIONS:       ${SHS_MAX_APPLICATIONS:-500}
+      SHS_RETAINED_APPLICATIONS:  ${SHS_RETAINED_APPLICATIONS:-100}
+      SHS_UPDATE_INTERVAL:        ${SHS_UPDATE_INTERVAL:-10s}
+      SHS_CLEANER_ENABLED:        ${SHS_CLEANER_ENABLED:-false}
+      SHS_ACLS_ENABLED:           ${SHS_ACLS_ENABLED:-false}
+
+    volumes:
+      # Use bind mount instead of named volume to avoid permission issues
+      - ${PWD:-.}/shs-logs:/shs-logs:rw
+      # Mount your ~/.oci dir for api_key or security_token auth
+      # Comment out for instance_principal / resource_principal
+      - ${OCI_CONFIG_DIR:-~/.oci}:/root/.oci:ro
+    
+    # Run as root (required for Spark to access event logs)
+    user: "0:0"
+    
+    # Ensure proper permissions on volume
+    group_add:
+      - "1000"
+
+    ports:
+      - "${SHS_PORT:-18080}:${SHS_PORT:-18080}"
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${SHS_PORT:-18080}/api/v1/applications"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  shs-logs:
