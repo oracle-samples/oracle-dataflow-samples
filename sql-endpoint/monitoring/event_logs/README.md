@@ -173,3 +173,15 @@ spark-shs-prep/
     ├── entrypoint.sh           # Writes spark-defaults.conf, starts preparer + SHS
     └── prepare_logs.sh         # OCI download + decompress + clean pipeline
 ```
+
+## Troubleshooting Tips
+
+# Check Logs 
+podman logs -f spark-history-server
+
+# Remove the container and volume
+podman rm -f spark-history-server
+podman volume rm shs-logs
+
+# Rebuild
+podman build -t spark-shs-oci:latest ./spark-shs-prep
