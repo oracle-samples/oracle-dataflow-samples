@@ -1,0 +1,4 @@
+interface:
+  display_name: "Data Flow Spark OOM Troubleshooter"
+  short_description: "Diagnose Spark OOM failures"
+  default_prompt: "Use $dataflow-spark-oom-troubleshooter to diagnose this Data Flow Spark OOM or executor-loss incident."

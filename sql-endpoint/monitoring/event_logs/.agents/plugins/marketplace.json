@@ -1,0 +1,20 @@
+{
+  "name": "oracle-dataflow-samples",
+  "interface": {
+    "displayName": "Oracle Data Flow Samples"
+  },
+  "plugins": [
+    {
+      "name": "dataflow-spark-oom-troubleshooter",
+      "source": {
+        "source": "local",
+        "path": "./plugins/dataflow-spark-oom-troubleshooter"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Data & Analytics"
+    }
+  ]
+}
