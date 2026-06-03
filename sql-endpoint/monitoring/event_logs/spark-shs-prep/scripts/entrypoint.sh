@@ -15,7 +15,8 @@ set -euo pipefail
 # 1. Rewrites host-absolute paths in ~/.oci/config → container paths
 # 2. Writes spark-defaults.conf from env vars
 # 3. Starts the OCI log preparer (background watch or one-shot)
-# 4. Starts the Spark History Server in the foreground
+# 4. Starts the event-log checker agent
+# 5. Starts the Spark History Server in the foreground
 # ─────────────────────────────────────────────────────────────
 
 log()  { echo "[$(date '+%Y-%m-%d %H:%M:%S')] ENTRYPOINT  $*"; }
@@ -160,14 +161,45 @@ start_preparer() {
   fi
 }
 
+start_event_agent() {
+  if [[ "${SPARK_EVENT_AGENT_ENABLED:-true}" != "true" ]]; then
+    log "Spark event log agent disabled"
+    return
+  fi
+
+  local report_dir="${SPARK_EVENT_AGENT_REPORT_DIR:-${OUTPUT_DIR}/_agent-reports}"
+  local interval="${SPARK_EVENT_AGENT_INTERVAL:-$POLL_INTERVAL}"
+  mkdir -p "$report_dir"
+
+  if [[ "$WATCH_MODE" == "true" ]]; then
+    log "Starting Spark event log agent in background watch mode (poll every ${interval}s)"
+    /usr/local/bin/analyze_event_logs.py \
+      --input-dir "$OUTPUT_DIR" \
+      --output-dir "$report_dir" \
+      --watch \
+      --interval "$interval" &
+    log "Spark event log agent PID: $!"
+  else
+    log "Running Spark event log agent once..."
+    if ! /usr/local/bin/analyze_event_logs.py \
+      --input-dir "$OUTPUT_DIR" \
+      --output-dir "$report_dir"; then
+      warn "Spark event log agent failed; continuing to start the History Server"
+    fi
+  fi
+}
+
 # ── Main ──────────────────────────────────────────────────────
 patch_oci_config
 write_spark_conf
 start_preparer
+start_event_agent
 
 log "═══════════════════════════════════════════════"
 log " Starting Spark History Server"
 log " Log dir : $OUTPUT_DIR"
+log " Repairs : ${SPARK_EVENT_REPAIR_REPORT_DIR:-${OUTPUT_DIR}/_repair-reports}"
+log " Reports : ${SPARK_EVENT_AGENT_REPORT_DIR:-${OUTPUT_DIR}/_agent-reports}"
 log " UI      : http://0.0.0.0:${SHS_PORT}"
 log "═══════════════════════════════════════════════"
 

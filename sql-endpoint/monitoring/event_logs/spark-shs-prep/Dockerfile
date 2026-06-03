@@ -88,9 +88,13 @@ RUN java -version \
  && ps --version
 
 # ── Scripts ───────────────────────────────────────────────────
-COPY scripts/prepare_logs.sh /usr/local/bin/prepare_logs.sh
-COPY scripts/entrypoint.sh   /usr/local/bin/entrypoint.sh
+COPY scripts/prepare_logs.sh       /usr/local/bin/prepare_logs.sh
+COPY scripts/repair_spark_event_log.py /usr/local/bin/repair_spark_event_log.py
+COPY scripts/analyze_event_logs.py /usr/local/bin/analyze_event_logs.py
+COPY scripts/entrypoint.sh         /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/prepare_logs.sh \
+             /usr/local/bin/repair_spark_event_log.py \
+             /usr/local/bin/analyze_event_logs.py \
              /usr/local/bin/entrypoint.sh
 
 # ── Spark config ──────────────────────────────────────────────
@@ -121,6 +125,20 @@ ENV WATCH_MODE="true"
 ENV POLL_INTERVAL="300"
 ENV KEEP_RAW="false"
 ENV DEBUG="false"
+ENV SPARK_EVENT_REPAIR_ENABLED="true"
+ENV SPARK_EVENT_MAX_STRING_CHARS="18000000"
+ENV SPARK_EVENT_REPAIR_REPORT_DIR="/shs-logs/_repair-reports"
+
+ENV SPARK_EVENT_AGENT_ENABLED="true"
+ENV SPARK_EVENT_AGENT_REPORT_DIR="/shs-logs/_agent-reports"
+ENV SPARK_EVENT_AGENT_INTERVAL="300"
+ENV SPARK_EVENT_AGENT_MAX_SAMPLES="5000"
+ENV SPARK_EVENT_AGENT_LARGE_SHS_MODE="false"
+ENV SPARK_EVENT_AGENT_LARGE_SHS_MAX_STAGES="50"
+ENV SPARK_EVENT_AGENT_SPILL_WARN_BYTES="1073741824"
+ENV SPARK_EVENT_AGENT_GC_WARN_RATIO="0.10"
+ENV SPARK_EVENT_AGENT_GC_CRITICAL_RATIO="0.25"
+ENV SPARK_EVENT_AGENT_SKEW_RATIO="5.0"
 
 ENV SHS_PORT="18080"
 ENV SHS_MAX_APPLICATIONS="500"
