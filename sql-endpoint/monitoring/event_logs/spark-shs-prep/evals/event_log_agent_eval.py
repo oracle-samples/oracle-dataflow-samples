@@ -101,10 +101,11 @@ def stage_info(
     name: str,
     failure_reason: str = "",
     tasks: int = 2,
+    attempt_id: int = 0,
 ) -> dict[str, Any]:
     info = {
         "Stage ID": stage_id,
-        "Stage Attempt ID": 0,
+        "Stage Attempt ID": attempt_id,
         "Stage Name": name,
         "Number of Tasks": tasks,
         "Submission Time": 1710000005000 + stage_id,
@@ -115,11 +116,13 @@ def stage_info(
     return info
 
 
-def failed_task_end(stage_id: int, class_name: str, description: str) -> dict[str, Any]:
+def failed_task_end(
+    stage_id: int, class_name: str, description: str, attempt_id: int = 0
+) -> dict[str, Any]:
     return {
         "Event": "SparkListenerTaskEnd",
         "Stage ID": stage_id,
-        "Stage Attempt ID": 0,
+        "Stage Attempt ID": attempt_id,
         "Task End Reason": {
             "Reason": "ExceptionFailure",
             "Class Name": class_name,
@@ -138,11 +141,11 @@ def failed_task_end(stage_id: int, class_name: str, description: str) -> dict[st
     }
 
 
-def success_task_end(stage_id: int) -> dict[str, Any]:
+def success_task_end(stage_id: int, attempt_id: int = 0) -> dict[str, Any]:
     return {
         "Event": "SparkListenerTaskEnd",
         "Stage ID": stage_id,
-        "Stage Attempt ID": 0,
+        "Stage Attempt ID": attempt_id,
         "Task End Reason": {"Reason": "Success"},
         "Task Metrics": {
             "Executor Run Time": 1000,
@@ -160,8 +163,25 @@ def eval_full_file_oom_resolution(tmpdir: Path) -> dict[str, Any]:
         "failed reduce after executor loss",
         "org.apache.spark.shuffle.FetchFailedException after ExecutorDeadException",
     )
+    retry_stage = stage_info(2, "retried reduce after executor loss", attempt_id=1)
     events = base_events() + [
-        {"Event": "SparkListenerJobStart", "Job ID": 10, "Submission Time": 1710000001000, "Stage IDs": [2]},
+        {
+            "Event": "org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart",
+            "executionId": 42,
+            "description": "select count(*) from eval_table",
+            "details": "HashAggregate over eval_table",
+            "time": 1710000000500,
+        },
+        {
+            "Event": "SparkListenerJobStart",
+            "Job ID": 10,
+            "Submission Time": 1710000001000,
+            "Stage IDs": [2],
+            "Properties": {
+                "spark.sql.execution.id": "42",
+                "spark.job.description": "select count(*) from eval_table",
+            },
+        },
         {"Event": "SparkListenerStageSubmitted", "Stage Info": failed_stage},
         {
             "Event": "SparkListenerExecutorRemoved",
@@ -175,6 +195,9 @@ def eval_full_file_oom_resolution(tmpdir: Path) -> dict[str, Any]:
             "FetchFailedException caused by ExecutorDeadException for executor 7",
         ),
         {"Event": "SparkListenerStageCompleted", "Stage Info": failed_stage},
+        {"Event": "SparkListenerStageSubmitted", "Stage Info": retry_stage},
+        success_task_end(2, attempt_id=1),
+        {"Event": "SparkListenerStageCompleted", "Stage Info": retry_stage},
         {
             "Event": "SparkListenerJobEnd",
             "Job ID": 10,
@@ -183,6 +206,12 @@ def eval_full_file_oom_resolution(tmpdir: Path) -> dict[str, Any]:
                 "Result": "JobFailed",
                 "Exception": "FetchFailedException after ExecutorDeadException",
             },
+        },
+        {
+            "Event": "org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionEnd",
+            "executionId": 42,
+            "time": 1710000013000,
+            "errorMessage": "FetchFailedException after ExecutorDeadException",
         },
         {"Event": "SparkListenerApplicationEnd", "Timestamp": 1710000012000},
     ]
@@ -205,10 +234,19 @@ def eval_full_file_oom_resolution(tmpdir: Path) -> dict[str, Any]:
     )
     require_contains("plan scopes", scopes, {"oom-resolution", "shuffle-recovery", "resource-pressure"})
     require_equal("analysis mode", report["summary"]["analysis_mode"], "full-file")
+    require_equal("query count", report["summary"]["queries"]["total"], 1)
+    query = report["query_breakdown"][0]
+    require_equal("query id", query["execution_id"], 42)
+    require_equal("query jobs", query["jobs"]["total"], 1)
+    require_equal("query unique stages", query["stages"]["unique"], 1)
+    require_equal("query stage attempts", query["stages"]["attempts"], 2)
+    require_equal("query tasks", query["tasks"]["total"], 2)
+    require_equal("query retries", query["retries"]["occurred"], True)
     return {
         "event_count": report["summary"]["event_count"],
         "finding_codes": sorted(codes),
         "plan_scopes": sorted(scopes),
+        "query_breakdown": report["query_breakdown"],
     }
 
 

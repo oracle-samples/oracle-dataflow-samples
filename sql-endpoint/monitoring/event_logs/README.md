@@ -158,7 +158,7 @@ The agent reads the normalized files in `/shs-logs` and writes:
 | `/shs-logs/_agent-reports/<app>.report.json` | Detailed application report |
 | `/shs-logs/_agent-reports/<app>.report.md` | Human-readable application findings |
 
-Current checks include failed jobs/stages/tasks, executor-loss and fetch-failure signatures, JVM/container/direct-memory OOM signatures, high spill, high GC time, high fetch wait, and task/input/shuffle skew. Reports also include a structured resolution plan. Data-health plans are emitted first when parse errors, missing events, or incomplete logs mean the SHS input should be fixed before application tuning.
+Current checks include failed jobs/stages/tasks, executor-loss and fetch-failure signatures, JVM/container/direct-memory OOM signatures, high spill, high GC time, high fetch wait, and task/input/shuffle skew. Reports include a per-query breakdown with job, stage, task, duration, and retry evidence when Spark SQL execution metadata is present, plus a structured resolution plan. Data-health plans are emitted first when parse errors, missing events, or incomplete logs mean the SHS input should be fixed before application tuning.
 
 Large SHS directory mode is intended for already-downloaded Spark History Server directories such as `eventlog_v2_spark-application-*`. It scans all `events_*` files in numeric order, parses only app/job/stage/executor/SQL/signature-bearing events first, then deep-parses `SparkListenerTaskEnd` metrics only for failed or signature-bearing stages. This keeps OOM and executor-loss root-cause analysis practical on very large SHS trees. In this mode, report task totals are the targeted failed/suspect-stage task totals, not full-application task totals.
 

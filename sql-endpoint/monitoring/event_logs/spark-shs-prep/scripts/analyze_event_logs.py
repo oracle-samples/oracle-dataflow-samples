@@ -222,6 +222,10 @@ def format_ms(value: int) -> str:
     return f"{minutes / 60:.1f} hr"
 
 
+def duration_ms_between(start_ms: int, end_ms: int) -> int:
+    return max(0, end_ms - start_ms) if start_ms and end_ms else 0
+
+
 def sanitize_report_name(path: Path) -> str:
     clean = re.sub(r"[^A-Za-z0-9_.-]+", "_", path.name).strip("._")
     return clean or "spark-event-log"
@@ -545,11 +549,19 @@ class SparkEventLogAnalyzer:
             job_id = to_int(event.get("Job ID"), -1)
             if job_id >= 0:
                 stage_ids = [to_int(stage_id) for stage_id in event.get("Stage IDs", [])]
+                properties = self.extract_event_properties(event.get("Properties"))
+                sql_execution_id = to_int(properties.get("spark.sql.execution.id"), -1)
                 self.jobs.setdefault(job_id, {}).update(
                     {
                         "job_id": job_id,
+                        "submission_time_ms": to_int(event.get("Submission Time")),
                         "submission_time": ms_to_iso(event.get("Submission Time")),
                         "stage_ids": stage_ids,
+                        "sql_execution_id": sql_execution_id if sql_execution_id >= 0 else None,
+                        "job_group": properties.get("spark.jobGroup.id"),
+                        "description": first_sentence(
+                            str(properties.get("spark.job.description") or ""), 500
+                        ),
                         "status": "running",
                     }
                 )
@@ -602,6 +614,7 @@ class SparkEventLogAnalyzer:
                     "execution_id": execution_id,
                     "description": first_sentence(str(event.get("description") or ""), 500),
                     "details": first_sentence(str(event.get("details") or ""), 1000),
+                    "start_time_ms": to_int(event.get("time")),
                     "start_time": ms_to_iso(event.get("time")),
                     "status": "running",
                 }
@@ -611,6 +624,7 @@ class SparkEventLogAnalyzer:
             if execution_id >= 0:
                 self.sql_executions.setdefault(execution_id, {"execution_id": execution_id}).update(
                     {
+                        "end_time_ms": to_int(event.get("time")),
                         "end_time": ms_to_iso(event.get("time")),
                         "status": "ended",
                         "error_message": first_sentence(str(event.get("errorMessage") or ""), 500),
@@ -618,20 +632,23 @@ class SparkEventLogAnalyzer:
                 )
                 self.check_signatures(event, "sql_execution_end")
 
+    def extract_event_properties(self, properties: Any) -> dict[str, str]:
+        extracted: dict[str, str] = {}
+        if isinstance(properties, dict):
+            for key, value in properties.items():
+                extracted[str(key)] = str(value)
+        elif isinstance(properties, list):
+            for item in properties:
+                if isinstance(item, list) and len(item) >= 2:
+                    extracted[str(item[0])] = str(item[1])
+        return extracted
+
     def extract_spark_properties(self, event: dict[str, Any]) -> dict[str, str]:
         environment_details = event.get("Environment Details") or {}
         if not isinstance(environment_details, dict):
             return {}
         spark_props = environment_details.get("Spark Properties") or {}
-        extracted: dict[str, str] = {}
-        if isinstance(spark_props, dict):
-            for key, value in spark_props.items():
-                extracted[str(key)] = str(value)
-        elif isinstance(spark_props, list):
-            for item in spark_props:
-                if isinstance(item, list) and len(item) >= 2:
-                    extracted[str(item[0])] = str(item[1])
-        return extracted
+        return self.extract_event_properties(spark_props)
 
     def stage_for(self, info: dict[str, Any]) -> StageStats:
         stage_id = to_int(info.get("Stage ID"), -1)
@@ -654,6 +671,7 @@ class SparkEventLogAnalyzer:
             result_name = str(result)
         self.jobs.setdefault(job_id, {"job_id": job_id}).update(
             {
+                "completion_time_ms": to_int(event.get("Completion Time")),
                 "completion_time": ms_to_iso(event.get("Completion Time")),
                 "result": result_name,
                 "exception": exception_text,
@@ -1182,6 +1200,182 @@ class SparkEventLogAnalyzer:
 
         return sorted(plans, key=lambda item: item["priority"])
 
+    def build_query_breakdown(
+        self, stage_summaries: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        stages_by_id: dict[int, list[StageStats]] = {}
+        for stage in self.stages.values():
+            stages_by_id.setdefault(stage.stage_id, []).append(stage)
+
+        query_ids = {
+            execution_id
+            for execution_id in self.sql_executions
+            if isinstance(execution_id, int) and execution_id >= 0
+        }
+        for job in self.jobs.values():
+            execution_id = job.get("sql_execution_id")
+            if isinstance(execution_id, int) and execution_id >= 0:
+                query_ids.add(execution_id)
+
+        stage_summaries_by_key = {
+            (summary["stage_id"], summary["attempt_id"]): summary for summary in stage_summaries
+        }
+        breakdown: list[dict[str, Any]] = []
+        for execution_id in sorted(query_ids):
+            query = dict(self.sql_executions.get(execution_id, {"execution_id": execution_id}))
+            query_jobs = sorted(
+                [
+                    job
+                    for job in self.jobs.values()
+                    if job.get("sql_execution_id") == execution_id
+                ],
+                key=lambda item: item.get("job_id", -1),
+            )
+            stage_id_set = {
+                stage_id
+                for job in query_jobs
+                for stage_id in job.get("stage_ids", [])
+                if isinstance(stage_id, int) and stage_id >= 0
+            }
+            query_stages = sorted(
+                [
+                    stage
+                    for stage_id in stage_id_set
+                    for stage in stages_by_id.get(stage_id, [])
+                ],
+                key=lambda item: (item.stage_id, item.attempt_id),
+            )
+            query_stage_summaries = [
+                stage_summaries_by_key.get((stage.stage_id, stage.attempt_id))
+                for stage in query_stages
+            ]
+            query_stage_summaries = [stage for stage in query_stage_summaries if stage]
+
+            query_start_ms = to_int(query.get("start_time_ms"))
+            query_end_ms = to_int(query.get("end_time_ms"))
+            duration_source = "sql_execution"
+            if not query_start_ms:
+                query_start_ms = min(
+                    [to_int(job.get("submission_time_ms")) for job in query_jobs if job.get("submission_time_ms")]
+                    or [0]
+                )
+                duration_source = "jobs" if query_start_ms else "unknown"
+            if not query_end_ms:
+                query_end_ms = max(
+                    [to_int(job.get("completion_time_ms")) for job in query_jobs if job.get("completion_time_ms")]
+                    or [0]
+                )
+                if query_end_ms and duration_source == "sql_execution":
+                    duration_source = "sql_execution_start_and_jobs"
+                elif query_end_ms:
+                    duration_source = "jobs"
+            duration_ms = duration_ms_between(query_start_ms, query_end_ms)
+
+            job_durations = [
+                duration_ms_between(
+                    to_int(job.get("submission_time_ms")), to_int(job.get("completion_time_ms"))
+                )
+                for job in query_jobs
+            ]
+            job_wall_clock_ms = duration_ms_between(
+                min([to_int(job.get("submission_time_ms")) for job in query_jobs if job.get("submission_time_ms")] or [0]),
+                max([to_int(job.get("completion_time_ms")) for job in query_jobs if job.get("completion_time_ms")] or [0]),
+            )
+
+            stage_attempts_by_id: dict[int, list[int]] = {}
+            for stage in query_stages:
+                stage_attempts_by_id.setdefault(stage.stage_id, []).append(stage.attempt_id)
+            retried_stage_ids = sorted(
+                stage_id
+                for stage_id, attempts in stage_attempts_by_id.items()
+                if len(set(attempts)) > 1 or any(attempt > 0 for attempt in attempts)
+            )
+            task_retry_attempts = sum(
+                max(0, stage.tasks_seen - stage.num_tasks_declared)
+                for stage in query_stages
+                if stage.num_tasks_declared > 0
+            )
+            failed_task_attempts = sum(stage.failed_tasks for stage in query_stages)
+            retry_occurred = bool(retried_stage_ids or task_retry_attempts)
+
+            failed_jobs = sum(1 for job in query_jobs if job.get("status") == "failed")
+            succeeded_jobs = sum(1 for job in query_jobs if job.get("status") == "succeeded")
+            error_message = str(query.get("error_message") or "")
+            if failed_jobs or error_message:
+                status = "failed"
+            elif query.get("status") == "ended":
+                status = "succeeded"
+            elif query.get("status") == "running":
+                status = "running"
+            else:
+                status = "unknown"
+
+            stage_duration_total = sum(stage["duration_ms"] for stage in query_stage_summaries)
+            stage_duration_max = max([stage["duration_ms"] for stage in query_stage_summaries] or [0])
+            task_executor_run_time = sum(
+                stage.executor_run_time.total for stage in query_stages
+            )
+
+            breakdown.append(
+                {
+                    "execution_id": execution_id,
+                    "description": query.get("description") or "",
+                    "details": query.get("details") or "",
+                    "status": status,
+                    "error_message": error_message,
+                    "start_time": query.get("start_time") or ms_to_iso(query_start_ms),
+                    "end_time": query.get("end_time") or ms_to_iso(query_end_ms),
+                    "duration_ms": duration_ms,
+                    "duration": format_ms(duration_ms) if duration_ms else "",
+                    "duration_source": duration_source,
+                    "jobs": {
+                        "total": len(query_jobs),
+                        "failed": failed_jobs,
+                        "succeeded": succeeded_jobs,
+                        "running": sum(
+                            1 for job in query_jobs if job.get("status") == "running"
+                        ),
+                        "job_ids": [job["job_id"] for job in query_jobs],
+                        "duration_ms_total": sum(job_durations),
+                        "wall_clock_duration_ms": job_wall_clock_ms,
+                    },
+                    "stages": {
+                        "unique": len(stage_attempts_by_id),
+                        "attempts": len(query_stages),
+                        "failed_attempts": sum(1 for stage in query_stages if stage.failure_reason),
+                        "stage_ids": sorted(stage_attempts_by_id),
+                        "retried_stage_ids": retried_stage_ids,
+                        "duration_ms_total": stage_duration_total,
+                        "max_duration_ms": stage_duration_max,
+                    },
+                    "tasks": {
+                        "total": sum(stage.tasks_seen for stage in query_stages),
+                        "failed": failed_task_attempts,
+                        "declared": sum(stage.num_tasks_declared for stage in query_stages),
+                        "executor_run_time_ms_total": task_executor_run_time,
+                        "counts_complete": self.analysis_mode == "full-file",
+                        "metrics_scope": "all_stages"
+                        if self.analysis_mode == "full-file"
+                        else "targeted_failed_or_signature_stages",
+                    },
+                    "retries": {
+                        "occurred": retry_occurred,
+                        "stage_retry_count": len(retried_stage_ids),
+                        "retried_stage_ids": retried_stage_ids,
+                        "task_retry_attempts": task_retry_attempts,
+                        "failed_task_attempts": failed_task_attempts,
+                    },
+                }
+            )
+
+        return sorted(
+            breakdown,
+            key=lambda item: (
+                item.get("start_time") or "",
+                item.get("execution_id", -1),
+            ),
+        )
+
     def source_size_bytes(self) -> int:
         if self.source.is_file():
             return self.source.stat().st_size
@@ -1199,6 +1393,7 @@ class SparkEventLogAnalyzer:
             key=lambda item: (SEVERITY_ORDER.get(item["severity"], 99), item["code"]),
         )
         resolution_plan = self.build_resolution_plan(findings, stage_summaries)
+        query_breakdown = self.build_query_breakdown(stage_summaries)
         summary = {
             "source_file": str(self.source),
             "source_size_bytes": self.source_size_bytes(),
@@ -1234,6 +1429,13 @@ class SparkEventLogAnalyzer:
                 "seen": len(self.executors),
                 "removed": sum(1 for executor in self.executors.values() if executor.get("removed")),
             },
+            "queries": {
+                "total": len(query_breakdown),
+                "failed": sum(1 for query in query_breakdown if query.get("status") == "failed"),
+                "with_retries": sum(
+                    1 for query in query_breakdown if query.get("retries", {}).get("occurred")
+                ),
+            },
             "findings": {
                 "total": len(findings),
                 "by_severity": dict(Counter(item["severity"] for item in findings)),
@@ -1252,6 +1454,7 @@ class SparkEventLogAnalyzer:
             "sql_executions": sorted(
                 self.sql_executions.values(), key=lambda item: item["execution_id"]
             ),
+            "query_breakdown": query_breakdown,
         }
 
     def selected_spark_properties(self) -> dict[str, str]:
@@ -1501,6 +1704,9 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Jobs: {summary['jobs']['total']} total, {summary['jobs']['failed']} failed",
         f"- Stages: {summary['stages']['total_attempts']} attempts, {summary['stages']['failed_attempts']} failed",
         f"- Tasks: {summary['tasks']['total']} total, {summary['tasks']['failed']} failed",
+        f"- Queries: {summary.get('queries', {}).get('total', 0)} total, "
+        f"{summary.get('queries', {}).get('failed', 0)} failed, "
+        f"{summary.get('queries', {}).get('with_retries', 0)} with retries",
         f"- Executors: {summary['executors']['seen']} seen, {summary['executors']['removed']} removed",
         "",
         "## Findings",
@@ -1541,6 +1747,9 @@ def render_markdown(report: dict[str, Any]) -> str:
             lines.extend(render_plan_list("Validation", plan.get("validation", [])))
             lines.extend(render_plan_list("Rollback", plan.get("rollback", [])))
 
+    lines.extend(["", "## Query Breakdown", ""])
+    lines.extend(render_query_breakdown_table(report.get("query_breakdown", [])))
+
     top_spill = sorted(
         report["stages"],
         key=lambda item: item["memory_spilled"]["total"] + item["disk_spilled"]["total"],
@@ -1566,6 +1775,42 @@ def render_markdown(report: dict[str, Any]) -> str:
             )
 
     return "\n".join(lines) + "\n"
+
+
+def render_query_breakdown_table(queries: list[dict[str, Any]]) -> list[str]:
+    if not queries:
+        return ["No SQL query executions were recorded."]
+    lines = [
+        "| Query | Status | Duration | Jobs | Stages | Tasks | Failed Tasks | Retries | Description |",
+        "|---|---|---:|---:|---:|---:|---:|---|---|",
+    ]
+    for query in queries:
+        jobs = query.get("jobs", {})
+        stages = query.get("stages", {})
+        tasks = query.get("tasks", {})
+        retries = query.get("retries", {})
+        retry_text = "yes" if retries.get("occurred") else "no"
+        if retries.get("stage_retry_count") or retries.get("task_retry_attempts"):
+            retry_text = (
+                f"{retry_text}; stages={retries.get('stage_retry_count', 0)}, "
+                f"task_attempts={retries.get('task_retry_attempts', 0)}"
+            )
+        stage_text = f"{stages.get('unique', 0)} unique / {stages.get('attempts', 0)} attempts"
+        description = first_sentence(str(query.get("description") or ""), 120).replace("|", "\\|")
+        duration = query.get("duration") or format_ms(to_int(query.get("duration_ms")))
+        lines.append(
+            f"| `{query.get('execution_id')}` | {query.get('status') or 'unknown'} | "
+            f"{duration} | {jobs.get('total', 0)} | {stage_text} | "
+            f"{tasks.get('total', 0)} | {tasks.get('failed', 0)} | "
+            f"{retry_text} | {description} |"
+        )
+    lines.extend(
+        [
+            "",
+            "Task counts are complete for full-file analysis. In large SHS directory mode, task counts are limited to failed or signature-bearing stages.",
+        ]
+    )
+    return lines
 
 
 def render_plan_list(label: str, values: list[str]) -> list[str]:
@@ -1611,6 +1856,7 @@ def write_index(reports: list[dict[str, Any]], output_dir: Path) -> None:
                 "jobs": summary["jobs"],
                 "stages": summary["stages"],
                 "tasks": summary["tasks"],
+                "queries": summary.get("queries", {"total": 0, "failed": 0, "with_retries": 0}),
             }
         )
 
@@ -1640,12 +1886,18 @@ def render_index_markdown(index: dict[str, Any]) -> str:
         lines.append("No Spark event logs were found.")
         return "\n".join(lines) + "\n"
 
-    lines.extend(["| Application | Source | Mode | Findings | Plans | Failed Jobs | Failed Tasks |", "|---|---|---|---:|---:|---:|---:|"])
+    lines.extend(
+        [
+            "| Application | Source | Mode | Queries | Findings | Plans | Failed Jobs | Failed Tasks |",
+            "|---|---|---|---:|---:|---:|---:|---:|",
+        ]
+    )
     for app in index["applications"]:
         name = app.get("app_name") or app.get("app_id") or "unknown"
         source = Path(app["source_file"]).name
         lines.append(
             f"| {name} | `{source}` | `{app.get('analysis_mode') or 'full-file'}` | "
+            f"{app.get('queries', {}).get('total', 0)} | "
             f"{app['findings']['total']} | "
             f"{app.get('resolution_plan_items', 0)} | "
             f"{app['jobs']['failed']} | {app['tasks']['failed']} |"

@@ -1,0 +1,259 @@
+<h1>Spark Event Log Monitoring Functionality Overview</h1>
+
+<h2>Abstract</h2>
+<p>
+This project provides an integrated workflow for collecting, preparing, serving,
+and analyzing Apache Spark event logs produced by Oracle Cloud Infrastructure
+Data Flow workloads. It is designed for environments where Spark event data is
+exported by a Fluent Bit sidecar to OCI Object Storage and must then be made
+available to Spark History Server for inspection.
+</p>
+<p>
+The solution combines four capabilities in a single containerized workflow:
+continuous event-log download from OCI Object Storage, event cleansing and
+sanitation for Spark History Server compatibility, Spark UI availability through
+Spark History Server, and automated analysis of common runtime failures with a
+structured resolution plan. The event-log agent focuses on practical root-cause
+signals such as out-of-memory failures, executor loss, shuffle fetch failures,
+high spill, high garbage collection time, skew, and malformed or incomplete log
+data.
+</p>
+
+<h2>Functional Scope</h2>
+<p>The project supports the following primary functions:</p>
+<ul>
+  <li>Continuous polling of OCI Object Storage for Spark event logs uploaded by a Fluent Bit sidecar.</li>
+  <li>Decompression and normalization of supported log object formats.</li>
+  <li>Cleansing and sanitation of Spark event JSON-lines data before Spark History Server reads it.</li>
+  <li>Spark History Server startup with the prepared event-log directory mounted as its log source.</li>
+  <li>Automated event-log analysis with JSON and Markdown reports.</li>
+  <li>Large Spark History Server directory analysis through a streaming mode that avoids full parsing of every task event when logs are very large.</li>
+  <li>Evaluation fixtures that validate the core diagnosis paths and data-health behavior without requiring Spark or OCI.</li>
+</ul>
+
+<h2>Schematic Process</h2>
+<pre>Spark application pod
+        |
+        | SparkListener event data
+        v
+Fluent Bit sidecar
+        |
+        | compressed log objects
+        v
+OCI Object Storage bucket
+        |
+        | continuous polling with OCI CLI
+        | WATCH_MODE=true, POLL_INTERVAL=&lt;seconds&gt;
+        v
+Log preparation container
+        |
+        | download, decompress, unwrap Fluent Bit envelope
+        v
+Spark event cleansing and sanitation
+        |
+        | keep valid Spark event JSON lines
+        | stop at corrupt Spark event prefix when necessary
+        | truncate oversized string fields
+        | write repair reports
+        v
+/shs-logs/&lt;application-id&gt;
+        |
+        +------------------------------+
+        |                              |
+        v                              v
+Spark History Server              Spark Event Log Agent
+http://localhost:18080            /shs-logs/_agent-reports
+        |                              |
+        | Spark UI and REST API        | JSON and Markdown findings
+        v                              v
+Interactive investigation          Root-cause feedback and resolution plan</pre>
+
+<h2>Continuous Event Download</h2>
+<p>
+Spark applications can produce event data that is exported by a Fluent Bit
+sidecar. The sidecar writes log objects to an OCI Object Storage bucket, usually
+as compressed files or wrapped log records. This project uses a background log
+preparer process to continuously poll that bucket and bring new objects into the
+Spark History Server log directory.
+</p>
+<p>The continuous download behavior is controlled through the runtime environment:</p>
+<table>
+  <thead>
+    <tr>
+      <th>Setting</th>
+      <th>Purpose</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td><code>OCI_NAMESPACE</code></td><td>Identifies the target OCI tenancy namespace.</td></tr>
+    <tr><td><code>OCI_BUCKET</code></td><td>Identifies the Object Storage bucket containing event logs.</td></tr>
+    <tr><td><code>OCI_REGION</code></td><td>Selects the OCI region.</td></tr>
+    <tr><td><code>OCI_PREFIX</code></td><td>Optionally restricts polling to a bucket prefix.</td></tr>
+    <tr><td><code>OCI_CLI_AUTH</code></td><td>Selects API key, security token, instance principal, or resource principal authentication.</td></tr>
+    <tr><td><code>WATCH_MODE</code></td><td>Enables continuous polling when set to <code>true</code>.</td></tr>
+    <tr><td><code>POLL_INTERVAL</code></td><td>Sets the interval between Object Storage checks.</td></tr>
+    <tr><td><code>KEEP_RAW</code></td><td>Controls whether raw downloaded objects are retained after processing.</td></tr>
+  </tbody>
+</table>
+<p>
+In watch mode, the container starts the log preparer in the background. It
+downloads new objects, decompresses supported formats, normalizes their content,
+and updates <code>/shs-logs</code> so Spark History Server can discover new or
+updated applications.
+</p>
+
+<h2>Cleansing and Sanitation</h2>
+<p>
+Raw log objects are not always immediately suitable for Spark History Server.
+They can be compressed, wrapped by Fluent Bit JSON envelopes, partially written,
+truncated, or contain oversized string fields that make Spark History Server
+loading expensive or unreliable. The preparation pipeline therefore includes a
+repair and sanitation phase before a file is exposed to Spark History Server.
+</p>
+<p>The cleansing and sanitation process performs the following work:</p>
+<ol>
+  <li>Decompresses supported object formats such as gzip and lz4.</li>
+  <li>Detects whether Fluent Bit wrapping is present.</li>
+  <li>Extracts the Spark event payload from the wrapper when needed.</li>
+  <li>Keeps Spark event records that are valid JSON-lines data.</li>
+  <li>Stops at the first corrupt Spark event line when preserving the valid prefix is safer than passing malformed data to Spark History Server.</li>
+  <li>Truncates oversized string fields to avoid Spark History Server parser and memory pressure.</li>
+  <li>Writes repair metadata for auditability, including corruption line, stopped line, and truncation counts.</li>
+</ol>
+<p>This phase is controlled by:</p>
+<table>
+  <thead>
+    <tr>
+      <th>Setting</th>
+      <th>Purpose</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td><code>SPARK_EVENT_REPAIR_ENABLED</code></td><td>Enables validation and sanitation before Spark History Server reads the log.</td></tr>
+    <tr><td><code>SPARK_EVENT_MAX_STRING_CHARS</code></td><td>Defines the maximum string length retained in event JSON.</td></tr>
+    <tr><td><code>SPARK_EVENT_REPAIR_REPORT_DIR</code></td><td>Stores per-input repair reports.</td></tr>
+    <tr><td><code>FLUENT_BIT_WRAPPED</code></td><td>Controls wrapper detection with <code>auto</code>, <code>true</code>, or <code>false</code>.</td></tr>
+  </tbody>
+</table>
+<p>
+The output is a normalized Spark event-log file under <code>/shs-logs</code>.
+Spark History Server reads that normalized file rather than the raw object
+downloaded from OCI.
+</p>
+
+<h2>Spark UI Availability</h2>
+<p>
+After the preparation process starts, the container starts Spark History Server
+in the foreground. Spark History Server reads from the prepared
+<code>/shs-logs</code> directory and exposes the Spark UI on the configured
+port.
+</p>
+<p>Primary access points are:</p>
+<table>
+  <thead>
+    <tr>
+      <th>Interface</th>
+      <th>Purpose</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td><code>http://localhost:18080</code></td><td>Spark History Server UI for jobs, stages, SQL, executors, and environment.</td></tr>
+    <tr><td><code>/api/v1/applications</code></td><td>REST endpoint for application inventory.</td></tr>
+    <tr><td><code>/api/v1/applications/&lt;appId&gt;/jobs</code></td><td>REST endpoint for jobs.</td></tr>
+    <tr><td><code>/api/v1/applications/&lt;appId&gt;/stages</code></td><td>REST endpoint for stages.</td></tr>
+    <tr><td><code>/api/v1/applications/&lt;appId&gt;/executors</code></td><td>REST endpoint for executor-level information.</td></tr>
+    <tr><td><code>/api/v1/applications/&lt;appId&gt;/environment</code></td><td>REST endpoint for Spark configuration and runtime environment.</td></tr>
+  </tbody>
+</table>
+<p>
+Spark History Server remains the primary interactive investigation surface. The
+agent complements it by summarizing common failure signals and producing a
+resolution-oriented report.
+</p>
+
+<h2>Automated Error Analysis and Resolution Feedback</h2>
+<p>
+The Spark Event Log Agent reads prepared Spark event logs and writes reports to
+<code>/shs-logs/_agent-reports</code>. Each application receives a
+machine-readable JSON report and a Markdown report. An index summarizes all
+checked applications.
+</p>
+<p>The agent evaluates both data-health and runtime-failure signals:</p>
+<table>
+  <thead>
+    <tr>
+      <th>Finding Area</th>
+      <th>Examples</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>Data health</td><td>Parse errors, missing Spark events, incomplete applications.</td></tr>
+    <tr><td>Failed work</td><td>Failed jobs, failed stage attempts, high failed-task rate.</td></tr>
+    <tr><td>Memory pressure</td><td>Kubernetes or container <code>OOMKilled</code>, exit code <code>137</code>, JVM heap OOM, GC overhead, direct or native memory pressure.</td></tr>
+    <tr><td>Shuffle failures</td><td><code>FetchFailedException</code>, missing shuffle blocks, executor death before fetch failure.</td></tr>
+    <tr><td>Resource pressure</td><td>High memory or disk spill, high fetch wait time, task runtime skew, input skew, shuffle-read skew.</td></tr>
+  </tbody>
+</table>
+<p>The agent also generates a structured resolution plan. A plan can include:</p>
+<ul>
+  <li>A root-cause statement with confidence level.</li>
+  <li>Evidence from event-log fields, stages, executor removals, and Spark properties.</li>
+  <li>Immediate mitigations to unblock a run.</li>
+  <li>Durable fixes that reduce peak memory or shuffle pressure.</li>
+  <li>Validation expectations for the next run.</li>
+  <li>Rollback conditions when a mitigation increases cost or fails to reduce the observed failure.</li>
+</ul>
+<p>
+For very large Spark History Server directories, the agent can use large SHS
+directory mode. In that mode it scans <code>eventlog_v2_*</code> directories in
+two passes:
+</p>
+<ol>
+  <li>First pass: parse only root-cause-relevant event types such as application, job, stage, executor, SQL, and signature-bearing events.</li>
+  <li>Second pass: deep-parse <code>SparkListenerTaskEnd</code> metrics only for failed or signature-bearing stages.</li>
+</ol>
+<p>
+This makes analysis practical when event logs contain large numbers of task
+events, while preserving the task metrics most relevant to root-cause analysis.
+</p>
+
+<h2>Benefits</h2>
+<p>The project provides the following operational benefits:</p>
+<ul>
+  <li>Single container workflow for OCI download, repair, Spark History Server, and automated diagnosis.</li>
+  <li>Continuous Object Storage polling for event logs produced by Fluent Bit sidecars.</li>
+  <li>Reduced Spark History Server failures by sanitizing malformed or oversized event data before UI loading.</li>
+  <li>Direct Spark UI availability for detailed investigation.</li>
+  <li>Automated first-pass triage for common Spark incidents.</li>
+  <li>Resolution plans that distinguish symptoms from likely root cause, especially fetch failures that follow executor loss.</li>
+  <li>Large-directory analysis mode for practical handling of high-volume Spark History Server event data.</li>
+  <li>Dependency-free evals that validate the agent's core behavior locally.</li>
+</ul>
+
+<h2>Difficulties and Operational Considerations</h2>
+<p>The workflow also has limitations and operating considerations:</p>
+<ul>
+  <li>Event-log completeness matters. Missing final objects can make an application appear incomplete or hide late executor failures.</li>
+  <li>Fluent Bit wrapping and object layout can vary by deployment, so wrapper detection must be configured correctly when auto-detection is insufficient.</li>
+  <li>Corrupt event data can only be repaired up to the point where a valid Spark event prefix is preserved. If the corrupt section contains the root failure, additional raw logs may still be required.</li>
+  <li>Very large applications can still require significant streaming time, especially when a failed or suspect stage contains many task-end records.</li>
+  <li>Spark event logs do not always include every artifact needed for definitive diagnosis. Executor stdout, stderr, Kubernetes pod events, and the final SQL physical plan may still be needed for high-confidence remediation.</li>
+  <li>OCI authentication, network connectivity, and bucket permissions must be configured correctly before the downloader can operate continuously.</li>
+  <li>Spark History Server resource sizing must match the number and size of retained applications.</li>
+</ul>
+
+<h2>Conclusion</h2>
+<p>
+This project turns Spark event logs exported by Fluent Bit sidecars into an
+operational troubleshooting workflow. It continuously downloads event data from
+OCI Object Storage, repairs and sanitizes it for Spark History Server, exposes
+the Spark UI for detailed inspection, and runs an event-log agent that identifies
+common Spark failure modes and proposes resolution plans.
+</p>
+<p>
+The result is a practical bridge between raw event-log collection and actionable
+Spark operations. Spark History Server remains available for human inspection,
+while the agent accelerates triage by highlighting data-health issues, memory
+pressure, executor loss, shuffle failures, skew, spill, and other recurring
+root-cause patterns.
+</p>
