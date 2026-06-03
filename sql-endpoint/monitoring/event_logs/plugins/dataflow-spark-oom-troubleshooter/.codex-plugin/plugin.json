@@ -1,0 +1,36 @@
+{
+  "name": "dataflow-spark-oom-troubleshooter",
+  "version": "0.1.0",
+  "description": "Codex plugin for diagnosing Oracle Data Flow Spark OOM, executor-loss, FetchFailed, broadcast, shuffle, and event-log incidents.",
+  "author": {
+    "name": "Oracle Data Flow Samples"
+  },
+  "homepage": "https://github.com/oracle-samples/oracle-dataflow-samples/tree/main/sql-endpoint/monitoring/event_logs",
+  "repository": "https://github.com/oracle-samples/oracle-dataflow-samples",
+  "license": "UPL-1.0",
+  "keywords": [
+    "oracle-data-flow",
+    "spark",
+    "oom",
+    "event-logs",
+    "spark-history-server"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Data Flow Spark OOM Troubleshooter",
+    "shortDescription": "Diagnose Spark OOM and FetchFailed incidents.",
+    "longDescription": "Troubleshoot Oracle Data Flow and Spark SQL jobs using event logs, Spark History Server metrics, physical plans, executor loss reasons, Kubernetes OOMKilled signals, broadcast reuse, AQE behavior, shuffle pressure, and memoryOverhead sizing.",
+    "developerName": "Oracle Data Flow Samples",
+    "category": "Data & Analytics",
+    "capabilities": [
+      "Analyze",
+      "Diagnose",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Diagnose this Spark OOM from my plan and executor logs.",
+      "Explain why this Spark stage failed with FetchFailed.",
+      "Review these Spark History Server metrics for memory risk."
+    ]
+  }
+}

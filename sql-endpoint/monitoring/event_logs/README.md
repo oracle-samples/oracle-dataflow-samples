@@ -147,6 +147,47 @@ curl http://localhost:18080/api/v1/applications/<appId>/environment
 
 ---
 
+## Codex troubleshooting plugin
+
+This sample includes a Codex plugin for diagnosing Spark OOM, executor loss, `FetchFailedException`, broadcast, shuffle, AQE, and `memoryOverhead` issues from Data Flow event logs and Spark History Server output.
+
+Plugin files:
+
+```text
+.agents/plugins/marketplace.json
+plugins/dataflow-spark-oom-troubleshooter/
+```
+
+From this directory, add the repository-local marketplace to Codex:
+
+```bash
+codex plugin marketplace add "$(pwd)"
+```
+
+Then install or enable the `dataflow-spark-oom-troubleshooter` plugin in Codex. In a new Codex session, ask for the skill explicitly or describe the Spark incident:
+
+```text
+Use $dataflow-spark-oom-troubleshooter to diagnose this Data Flow Spark OOM.
+```
+
+Useful inputs for the skill include:
+
+- Physical plan output from Spark SQL or DataFrame execution.
+- Spark History Server REST output for applications, stages, executors, and environment.
+- Driver and executor logs around the failed stage or killed executor.
+- Cluster sizing and Spark configs such as executor memory, `spark.executor.memoryOverhead`, executor cores, shuffle partitions, AQE, and broadcast thresholds.
+
+The plugin also includes a standalone triage helper:
+
+```bash
+python3 plugins/dataflow-spark-oom-troubleshooter/skills/dataflow-spark-oom-troubleshooter/scripts/analyze_spark_oom.py \
+  plan.txt driver.log executor.log
+```
+
+The script flags common signatures such as Kubernetes `OOMKilled` / exit 137, `FetchFailedException` caused by executor loss, large broadcast exchanges, `explode(arrays_zip(...))`, low shuffle partition counts, and AQE coalesced shuffle reads.
+
+---
+
 ## Supported input formats
 
 | Format | Handled |
