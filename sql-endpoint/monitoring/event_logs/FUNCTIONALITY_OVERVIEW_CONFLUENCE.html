@@ -203,6 +203,96 @@ checked applications.
   <li>Validation expectations for the next run.</li>
   <li>Rollback conditions when a mitigation increases cost or fails to reduce the observed failure.</li>
 </ul>
+
+<h3>Example Output and Outcomes</h3>
+<p>
+The following examples illustrate the type of output produced by the agent. The
+values are representative and are intended to show the report structure and the
+operational feedback loop.
+</p>
+
+<p>Example findings table:</p>
+<table>
+  <thead>
+    <tr>
+      <th>Severity</th>
+      <th>Code</th>
+      <th>Finding</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>critical</td><td><code>CONTAINER_OOM_OR_137</code></td><td>Container or memory-overhead OOM signature found in executor removal evidence.</td></tr>
+    <tr><td>high</td><td><code>FETCH_FAILED_AFTER_EXECUTOR_LOSS</code></td><td>A fetch failure and executor loss both appear, indicating that a downstream reducer likely discovered missing shuffle blocks after an executor died.</td></tr>
+    <tr><td>high</td><td><code>HIGH_STAGE_SPILL</code></td><td>Stage <code>2.0</code> spilled a large amount of data across memory and disk.</td></tr>
+    <tr><td>medium</td><td><code>HIGH_FETCH_WAIT</code></td><td>The failed stage spent a high share of executor runtime waiting on shuffle fetches.</td></tr>
+  </tbody>
+</table>
+
+<p>Example query breakdown:</p>
+<table>
+  <thead>
+    <tr>
+      <th>Query</th>
+      <th>Status</th>
+      <th>Duration</th>
+      <th>Jobs</th>
+      <th>Stages</th>
+      <th>Tasks</th>
+      <th>Failed Tasks</th>
+      <th>Retries</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>42</code></td>
+      <td>failed</td>
+      <td>12.5 s</td>
+      <td>1</td>
+      <td>1 unique / 2 attempts</td>
+      <td>2</td>
+      <td>1</td>
+      <td>yes; stages=1, task_attempts=0</td>
+      <td><code>select count(*) from eval_table</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Example resolution-plan excerpt:</p>
+<pre>Scope: oom-resolution
+Title: Resolve container or memory-overhead OOM
+Root cause: An executor/container was killed outside the JVM heap, usually from
+overhead, direct/native memory, shuffle buffers, Python/native usage, or too
+many concurrent tasks.
+Immediate mitigation:
+  - Increase spark.executor.memoryOverhead for the next run.
+  - Reduce spark.executor.cores or use more smaller executors so fewer
+    memory-heavy tasks share one container.
+Durable fix:
+  - Reduce per-task shuffle and spill pressure with more partitions, skew
+    handling, and narrower rows.
+Validation:
+  - Executor removals with OOMKilled or exit 137 should disappear.
+  - FetchFailed should not recur after the executor-loss root cause is removed.</pre>
+
+<p>Typical outcomes are:</p>
+<table>
+  <thead>
+    <tr>
+      <th>Input Evidence</th>
+      <th>Agent Output</th>
+      <th>Expected Operator Outcome</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>Corrupt or truncated Spark event lines</td><td>Data-health plan with parse-error samples and repair guidance</td><td>Re-download, repair, or regenerate event objects before relying on Spark UI analysis.</td></tr>
+    <tr><td><code>OOMKilled</code>, exit code <code>137</code>, or memory-overhead text in executor removal</td><td>Container OOM plan with memory-overhead and concurrency recommendations</td><td>Resize executor memory overhead, reduce executor cores, or use more smaller executors.</td></tr>
+    <tr><td><code>FetchFailedException</code> after executor loss</td><td>Shuffle-recovery plan that treats fetch failure as a symptom</td><td>Fix executor loss first, then rerun and verify missing shuffle blocks disappear.</td></tr>
+    <tr><td>High spill, high fetch wait, or skewed task metrics</td><td>Resource-pressure plan with partitioning and skew-handling recommendations</td><td>Increase or rebalance partitions, reduce row width, handle hot keys, and validate lower spill/fetch wait.</td></tr>
+    <tr><td>Large <code>eventlog_v2_*</code> directory with many task events</td><td>Large SHS streaming report with targeted failed-stage metrics</td><td>Obtain practical root-cause feedback without parsing every task event in the application.</td></tr>
+  </tbody>
+</table>
+
 <p>
 For very large Spark History Server directories, the agent can use large SHS
 directory mode. In that mode it scans <code>eventlog_v2_*</code> directories in

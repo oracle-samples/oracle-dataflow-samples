@@ -181,6 +181,57 @@ The agent also generates a structured resolution plan. A plan can include:
 - Rollback conditions when a mitigation increases cost or fails to reduce the
   observed failure.
 
+### Example Output and Outcomes
+
+The following examples illustrate the type of output produced by the agent. The
+values are representative and are intended to show the report structure and the
+operational feedback loop.
+
+Example findings table:
+
+| Severity | Code | Finding |
+|---|---|---|
+| critical | `CONTAINER_OOM_OR_137` | Container or memory-overhead OOM signature found in executor removal evidence. |
+| high | `FETCH_FAILED_AFTER_EXECUTOR_LOSS` | A fetch failure and executor loss both appear, indicating that a downstream reducer likely discovered missing shuffle blocks after an executor died. |
+| high | `HIGH_STAGE_SPILL` | Stage `2.0` spilled a large amount of data across memory and disk. |
+| medium | `HIGH_FETCH_WAIT` | The failed stage spent a high share of executor runtime waiting on shuffle fetches. |
+
+Example query breakdown:
+
+| Query | Status | Duration | Jobs | Stages | Tasks | Failed Tasks | Retries | Description |
+|---|---|---:|---:|---:|---:|---:|---|---|
+| `42` | failed | 12.5 s | 1 | 1 unique / 2 attempts | 2 | 1 | yes; stages=1, task_attempts=0 | `select count(*) from eval_table` |
+
+Example resolution-plan excerpt:
+
+```text
+Scope: oom-resolution
+Title: Resolve container or memory-overhead OOM
+Root cause: An executor/container was killed outside the JVM heap, usually from
+overhead, direct/native memory, shuffle buffers, Python/native usage, or too
+many concurrent tasks.
+Immediate mitigation:
+  - Increase spark.executor.memoryOverhead for the next run.
+  - Reduce spark.executor.cores or use more smaller executors so fewer
+    memory-heavy tasks share one container.
+Durable fix:
+  - Reduce per-task shuffle and spill pressure with more partitions, skew
+    handling, and narrower rows.
+Validation:
+  - Executor removals with OOMKilled or exit 137 should disappear.
+  - FetchFailed should not recur after the executor-loss root cause is removed.
+```
+
+Typical outcomes are:
+
+| Input Evidence | Agent Output | Expected Operator Outcome |
+|---|---|---|
+| Corrupt or truncated Spark event lines | Data-health plan with parse-error samples and repair guidance | Re-download, repair, or regenerate event objects before relying on Spark UI analysis. |
+| `OOMKilled`, exit code `137`, or memory-overhead text in executor removal | Container OOM plan with memory-overhead and concurrency recommendations | Resize executor memory overhead, reduce executor cores, or use more smaller executors. |
+| `FetchFailedException` after executor loss | Shuffle-recovery plan that treats fetch failure as a symptom | Fix executor loss first, then rerun and verify missing shuffle blocks disappear. |
+| High spill, high fetch wait, or skewed task metrics | Resource-pressure plan with partitioning and skew-handling recommendations | Increase or rebalance partitions, reduce row width, handle hot keys, and validate lower spill/fetch wait. |
+| Large `eventlog_v2_*` directory with many task events | Large SHS streaming report with targeted failed-stage metrics | Obtain practical root-cause feedback without parsing every task event in the application. |
+
 For very large Spark History Server directories, the agent can use large SHS
 directory mode. In that mode it scans `eventlog_v2_*` directories in two passes:
 
