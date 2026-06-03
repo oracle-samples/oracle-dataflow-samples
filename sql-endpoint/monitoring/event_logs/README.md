@@ -1,11 +1,19 @@
 # spark-shs-oci
 
-#Oracle Cloud Infrastrure Dataflow
-#
-#Copyright © 2025, Oracle and/or its affiliates.
-#
-#Licensed under the Universal Permissive License v 1.0 as shown at https://oss.oracle.com/licenses/upl/
+Oracle Cloud Infrastructure Data Flow
 
+Copyright © 2025, Oracle and/or its affiliates.
+
+Licensed under the Universal Permissive License v 1.0 as shown at https://oss.oracle.com/licenses/upl/
+
+## Agent Requirements
+
+- Python 3.10 or later to run `spark-shs-prep/scripts/analyze_event_logs.py` directly.
+- No third-party Python packages are required for the event-log agent or eval runner.
+- Read access to Spark JSON-lines event logs, either normalized files or Spark History Server `eventlog_v2_*` directories.
+- Write access to the report directory, for example `/shs-logs/_agent-reports` in the container or `/tmp/spark-history-agent-reports` locally.
+- Docker or Podman is required only for the full OCI downloader + repair + agent + Spark History Server image.
+- OCI namespace, bucket, region, and an OCI auth method are required only when downloading event logs from OCI Object Storage.
 
 A single Docker image that:
 1. Downloads Spark event logs from **OCI Object Storage** (as shipped by Fluent Bit)
