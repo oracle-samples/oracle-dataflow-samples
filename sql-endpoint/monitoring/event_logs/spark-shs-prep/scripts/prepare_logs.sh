@@ -38,9 +38,12 @@ WATCH_MODE="${WATCH_MODE:-false}"
 POLL_INTERVAL="${POLL_INTERVAL:-300}"
 FLUENT_BIT_WRAPPED="${FLUENT_BIT_WRAPPED:-auto}"
 KEEP_RAW="${KEEP_RAW:-false}"
+SPARK_EVENT_REPAIR_ENABLED="${SPARK_EVENT_REPAIR_ENABLED:-true}"
+SPARK_EVENT_MAX_STRING_CHARS="${SPARK_EVENT_MAX_STRING_CHARS:-18000000}"
+SPARK_EVENT_REPAIR_REPORT_DIR="${SPARK_EVENT_REPAIR_REPORT_DIR:-${OUTPUT_DIR}/_repair-reports}"
 
 RAW_DIR="/tmp/oci-raw"
-mkdir -p "$RAW_DIR" "$OUTPUT_DIR"
+mkdir -p "$RAW_DIR" "$OUTPUT_DIR" "$SPARK_EVENT_REPAIR_REPORT_DIR"
 
 # ── OCI base args (populated by patch_and_build_config) ───────
 OCI_BASE_ARGS=()
@@ -368,6 +371,25 @@ extract_spark_lines() {
   fi
 }
 
+repair_spark_lines() {
+  local file="$1" wrapped="$2" output="$3" stats_file="$4"
+
+  if [[ "$SPARK_EVENT_REPAIR_ENABLED" == "true" ]]; then
+    /usr/local/bin/repair_spark_event_log.py \
+      --input "$file" \
+      --wrapped "$wrapped" \
+      --max-string-chars "$SPARK_EVENT_MAX_STRING_CHARS" \
+      --stats-file "$stats_file" \
+      > "$output"
+  else
+    extract_spark_lines "$file" "$wrapped" > "$output"
+  fi
+}
+
+safe_report_name() {
+  echo "$1" | sed "s|^$RAW_DIR/||" | tr '/ ' '__' | tr -c 'A-Za-z0-9_.-' '_'
+}
+
 # ── Decompress a single raw file ─────────────────────────────
 process_file() {
   local raw="$1"
@@ -471,22 +493,28 @@ prepare_for_shs() {
 
     log "Merging: $app_key"
     for raw in ${app_files[$app_key]}; do
-      local result decompressed wrapped lines count
+      local result decompressed wrapped tmp_events stats_file report_name count
       result=$(process_file "$raw") || continue
       decompressed=$(echo "$result" | cut -d'|' -f1)
       wrapped=$(echo "$result" | cut -d'|' -f2)
-      lines=$(extract_spark_lines "$decompressed" "$wrapped") || true
-      count=$(echo "$lines" | grep -c . || true)
+      tmp_events=$(mktemp /tmp/shs_events_XXXXXX.txt)
+      report_name="$(safe_report_name "$raw")"
+      stats_file="$SPARK_EVENT_REPAIR_REPORT_DIR/${app_name}_${report_name}.repair.json"
+      repair_spark_lines "$decompressed" "$wrapped" "$tmp_events" "$stats_file" || true
+      count=$(grep -c . "$tmp_events" || true)
 
       if [[ $count -gt 0 ]]; then
-        echo "$lines" >> "$tmp_merged"
+        cat "$tmp_events" >> "$tmp_merged"
         event_count=$(( event_count + count ))
         file_count=$(( file_count + 1 ))
         log "  + $(basename "$raw"): $count events"
+        if [[ -f "$stats_file" ]] && jq -e '.corruption_detected or (.truncated_strings > 0)' "$stats_file" >/dev/null 2>&1; then
+          warn "    repaired $(basename "$raw"): stopped_at=$(jq -r '.stopped_at_line // "-"' "$stats_file") truncated_strings=$(jq -r '.truncated_strings' "$stats_file")"
+        fi
       else
         warn "  - $(basename "$raw"): 0 events — first lines: $(head -3 "$decompressed")"
       fi
-      rm -f "$decompressed"
+      rm -f "$decompressed" "$tmp_events"
     done
 
     if [[ $event_count -gt 0 ]]; then
@@ -520,6 +548,7 @@ main() {
   log " Auth    : $OCI_CLI_AUTH  profile=${OCI_PROFILE}"
   log " Watch   : $WATCH_MODE   interval=${POLL_INTERVAL}s"
   log " FB wrap : $FLUENT_BIT_WRAPPED"
+  log " Repair  : $SPARK_EVENT_REPAIR_ENABLED  max_string_chars=${SPARK_EVENT_MAX_STRING_CHARS}"
   log "═══════════════════════════════════════════════════"
 
   check_auth

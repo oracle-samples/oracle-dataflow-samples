@@ -1,16 +1,25 @@
 # spark-shs-oci
 
-#Oracle Cloud Infrastrure Dataflow
-#
-#Copyright © 2025, Oracle and/or its affiliates.
-#
-#Licensed under the Universal Permissive License v 1.0 as shown at https://oss.oracle.com/licenses/upl/
+Oracle Cloud Infrastructure Data Flow
 
+Copyright © 2025, Oracle and/or its affiliates.
+
+Licensed under the Universal Permissive License v 1.0 as shown at https://oss.oracle.com/licenses/upl/
+
+## Agent Requirements
+
+- Python 3.10 or later to run `spark-shs-prep/scripts/analyze_event_logs.py` directly.
+- No third-party Python packages are required for the event-log agent or eval runner.
+- Read access to Spark JSON-lines event logs, either normalized files or Spark History Server `eventlog_v2_*` directories.
+- Write access to the report directory, for example `/shs-logs/_agent-reports` in the container or `/tmp/spark-history-agent-reports` locally.
+- Docker or Podman is required only for the full OCI downloader + repair + agent + Spark History Server image.
+- OCI namespace, bucket, region, and an OCI auth method are required only when downloading event logs from OCI Object Storage.
 
 A single Docker image that:
 1. Downloads Spark event logs from **OCI Object Storage** (as shipped by Fluent Bit)
-2. Decompresses, cleans, and merges them into SHS-compatible plain-text files
-3. Starts the **Spark History Server** — UI available at `http://localhost:18080`
+2. Decompresses, repairs, sanitizes, and merges them into SHS-compatible plain-text files
+3. Runs a **Spark Event Log Agent** that checks the normalized logs for failures and resource-pressure signatures
+4. Starts the **Spark History Server** — UI available at `http://localhost:18080`
 
 ---
 
@@ -26,13 +35,16 @@ OCI Bucket (.log.gz / .lz4)
    gunzip / lz4 -d
         │
         ▼
-   Fluent Bit unwrap (auto-detected)
+   Fluent Bit unwrap + JSON repair + string sanitization
         │
         ▼
-   grep SparkListener events
+   filter SparkListener events
         │
         ▼
    /shs-logs/<app-id>    ← plain text, no extension
+        │
+        ▼
+   Spark Event Log Agent → /shs-logs/_agent-reports/*.report.{json,md}
         │
         ▼  [foreground]
    Spark History Server → http://localhost:18080
@@ -52,6 +64,10 @@ docker compose up --build
 
 # 3. Open the UI
 open http://localhost:18080
+
+# 4. Read agent findings
+ls shs-logs/_agent-reports
+cat shs-logs/_agent-reports/latest.md
 ```
 
 ---
@@ -107,6 +123,65 @@ docker run -d \
 | `WATCH_MODE` | `true` | Poll OCI continuously |
 | `POLL_INTERVAL` | `300` | Seconds between polls |
 | `KEEP_RAW` | `false` | Keep raw downloaded files |
+| `SPARK_EVENT_REPAIR_ENABLED` | `true` | Validate/sanitize event JSON before SHS reads it |
+| `SPARK_EVENT_MAX_STRING_CHARS` | `18000000` | Truncate string fields larger than this threshold |
+| `SPARK_EVENT_REPAIR_REPORT_DIR` | `/shs-logs/_repair-reports` | Per-input repair stats |
+
+The repair step incorporates the same behavior as the local `fix_spark_event_logs.py` and `sanitize_spark_events_log.py` helpers:
+
+- keeps only valid Spark event JSON lines
+- stops at the first corrupt Spark event record, keeping the valid prefix
+- truncates oversized string fields so Spark History Server can load the file
+- writes per-file stats such as `stopped_at_line`, `corruption_message`, and `truncated_strings`
+
+### Spark Event Log Agent
+
+| Variable | Default | Description |
+|---|---|---|
+| `SPARK_EVENT_AGENT_ENABLED` | `true` | Run the checker after log preparation |
+| `SPARK_EVENT_AGENT_REPORT_DIR` | `/shs-logs/_agent-reports` | JSON and Markdown report directory |
+| `SPARK_EVENT_AGENT_INTERVAL` | `300` | Seconds between checks in watch mode |
+| `SPARK_EVENT_AGENT_MAX_SAMPLES` | `5000` | Per-stage samples retained for skew medians |
+| `SPARK_EVENT_AGENT_LARGE_SHS_MODE` | `false` | Stream existing `eventlog_v2_*` SHS directories instead of full-parsing normalized event-log files |
+| `SPARK_EVENT_AGENT_LARGE_SHS_MAX_STAGES` | `50` | Maximum failed or signature-bearing stages to deep-parse in large SHS mode |
+| `SPARK_EVENT_AGENT_SPILL_WARN_BYTES` | `1073741824` | Stage spill warning threshold |
+| `SPARK_EVENT_AGENT_GC_WARN_RATIO` | `0.10` | GC time share warning threshold |
+| `SPARK_EVENT_AGENT_GC_CRITICAL_RATIO` | `0.25` | GC time share high-severity threshold |
+| `SPARK_EVENT_AGENT_SKEW_RATIO` | `5.0` | Max-to-median skew threshold |
+
+The agent reads the normalized files in `/shs-logs` and writes:
+
+| File | Description |
+|---|---|
+| `/shs-logs/_agent-reports/index.json` | Machine-readable summary for all checked applications |
+| `/shs-logs/_agent-reports/latest.md` | Markdown index of the latest run |
+| `/shs-logs/_agent-reports/<app>.report.json` | Detailed application report |
+| `/shs-logs/_agent-reports/<app>.report.md` | Human-readable application findings |
+
+Current checks include failed jobs/stages/tasks, executor-loss and fetch-failure signatures, JVM/container/direct-memory OOM signatures, high spill, high GC time, high fetch wait, and task/input/shuffle skew. Reports include a per-query breakdown with job, stage, task, duration, and retry evidence when Spark SQL execution metadata is present, plus a structured resolution plan. Data-health plans are emitted first when parse errors, missing events, or incomplete logs mean the SHS input should be fixed before application tuning.
+
+Large SHS directory mode is intended for already-downloaded Spark History Server directories such as `eventlog_v2_spark-application-*`. It scans all `events_*` files in numeric order, parses only app/job/stage/executor/SQL/signature-bearing events first, then deep-parses `SparkListenerTaskEnd` metrics only for failed or signature-bearing stages. This keeps OOM and executor-loss root-cause analysis practical on very large SHS trees. In this mode, report task totals are the targeted failed/suspect-stage task totals, not full-application task totals.
+
+Example local run:
+
+```bash
+python3 spark-shs-prep/scripts/analyze_event_logs.py \
+  --input-dir /Users/mmiola/Downloads/spark_history \
+  --output-dir /tmp/spark-history-agent-reports \
+  --large-shs-mode
+```
+
+Run the agent evals with:
+
+```bash
+python3 spark-shs-prep/evals/event_log_agent_eval.py
+```
+
+The eval runner is dependency-free and creates temporary Spark event-log fixtures for:
+
+- normalized OOM plus fetch-after-executor-loss resolution plans
+- large SHS directory mode with targeted failed-stage `TaskEnd` parsing
+- malformed event-log data-health findings
 
 ### Spark History Server
 
@@ -210,9 +285,13 @@ spark-shs-prep/
 ├── .env.example                # Config template
 ├── conf/
 │   └── spark-defaults.conf     # Baked-in SHS defaults (overridden at runtime)
+├── evals/
+│   └── event_log_agent_eval.py # Dependency-free agent eval runner
 └── scripts/
-    ├── entrypoint.sh           # Writes spark-defaults.conf, starts preparer + SHS
-    └── prepare_logs.sh         # OCI download + decompress + clean pipeline
+    ├── entrypoint.sh           # Writes spark-defaults.conf, starts preparer + agent + SHS
+    ├── prepare_logs.sh         # OCI download + decompress + repair + clean pipeline
+    ├── repair_spark_event_log.py # Validates/sanitizes JSON-lines events for SHS
+    └── analyze_event_logs.py   # Spark event log checker and report writer
 ```
 
 ## Troubleshooting Tips
