@@ -192,6 +192,7 @@ checked applications.
     <tr><td>Memory pressure</td><td>Kubernetes or container <code>OOMKilled</code>, exit code <code>137</code>, JVM heap OOM, GC overhead, direct or native memory pressure.</td></tr>
     <tr><td>Shuffle failures</td><td><code>FetchFailedException</code>, missing shuffle blocks, executor death before fetch failure.</td></tr>
     <tr><td>Resource pressure</td><td>High memory or disk spill, high fetch wait time, task runtime skew, input skew, shuffle-read skew.</td></tr>
+    <tr><td>Write stalls</td><td>Task starts without matching task-end metrics, with guidance to validate object-store or Parquet writer stalls using executor thread dumps.</td></tr>
   </tbody>
 </table>
 <p>The agent also generates a structured resolution plan. A plan can include:</p>
@@ -223,6 +224,7 @@ operational feedback loop.
   <tbody>
     <tr><td>critical</td><td><code>CONTAINER_OOM_OR_137</code></td><td>Container or memory-overhead OOM signature found in executor removal evidence.</td></tr>
     <tr><td>high</td><td><code>FETCH_FAILED_AFTER_EXECUTOR_LOSS</code></td><td>A fetch failure and executor loss both appear, indicating that a downstream reducer likely discovered missing shuffle blocks after an executor died.</td></tr>
+    <tr><td>high</td><td><code>TASK_STARTS_WITHOUT_ENDS</code></td><td>A stage has task starts that never emitted task-end metrics, indicating live or incomplete work requiring executor thread dump validation.</td></tr>
     <tr><td>high</td><td><code>HIGH_STAGE_SPILL</code></td><td>Stage <code>2.0</code> spilled a large amount of data across memory and disk.</td></tr>
     <tr><td>medium</td><td><code>HIGH_FETCH_WAIT</code></td><td>The failed stage spent a high share of executor runtime waiting on shuffle fetches.</td></tr>
   </tbody>
@@ -237,7 +239,8 @@ operational feedback loop.
       <th>Duration</th>
       <th>Jobs</th>
       <th>Stages</th>
-      <th>Tasks</th>
+      <th>Tasks Ended</th>
+      <th>Unclosed Starts</th>
       <th>Failed Tasks</th>
       <th>Retries</th>
       <th>Description</th>
@@ -251,6 +254,7 @@ operational feedback loop.
       <td>1</td>
       <td>1 unique / 2 attempts</td>
       <td>2</td>
+      <td>0</td>
       <td>1</td>
       <td>yes; stages=1, task_attempts=0</td>
       <td><code>select count(*) from eval_table</code></td>
@@ -288,6 +292,7 @@ Validation:
     <tr><td>Corrupt or truncated Spark event lines</td><td>Data-health plan with parse-error samples and repair guidance</td><td>Re-download, repair, or regenerate event objects before relying on Spark UI analysis.</td></tr>
     <tr><td><code>OOMKilled</code>, exit code <code>137</code>, or memory-overhead text in executor removal</td><td>Container OOM plan with memory-overhead and concurrency recommendations</td><td>Resize executor memory overhead, reduce executor cores, or use more smaller executors.</td></tr>
     <tr><td><code>FetchFailedException</code> after executor loss</td><td>Shuffle-recovery plan that treats fetch failure as a symptom</td><td>Fix executor loss first, then rerun and verify missing shuffle blocks disappear.</td></tr>
+    <tr><td>Task starts without task ends in a write stage</td><td>Write-stall triage plan with executor thread-dump patterns</td><td>Confirm whether tasks are blocked in object-store metadata/write paths, then reduce final write fanout with <code>coalesce</code> or <code>repartition</code>.</td></tr>
     <tr><td>High spill, high fetch wait, or skewed task metrics</td><td>Resource-pressure plan with partitioning and skew-handling recommendations</td><td>Increase or rebalance partitions, reduce row width, handle hot keys, and validate lower spill/fetch wait.</td></tr>
     <tr><td>Large <code>eventlog_v2_*</code> directory with many task events</td><td>Large SHS streaming report with targeted failed-stage metrics</td><td>Obtain practical root-cause feedback without parsing every task event in the application.</td></tr>
   </tbody>

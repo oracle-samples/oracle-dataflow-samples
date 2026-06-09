@@ -158,7 +158,9 @@ The agent reads the normalized files in `/shs-logs` and writes:
 | `/shs-logs/_agent-reports/<app>.report.json` | Detailed application report |
 | `/shs-logs/_agent-reports/<app>.report.md` | Human-readable application findings |
 
-Current checks include failed jobs/stages/tasks, executor-loss and fetch-failure signatures, JVM/container/direct-memory OOM signatures, high spill, high GC time, high fetch wait, and task/input/shuffle skew. Reports include a per-query breakdown with job, stage, task, duration, and retry evidence when Spark SQL execution metadata is present, plus a structured resolution plan. Data-health plans are emitted first when parse errors, missing events, or incomplete logs mean the SHS input should be fixed before application tuning.
+Current checks include failed jobs/stages/tasks, task starts without matching task-end metrics, executor-loss and fetch-failure signatures, JVM/container/direct-memory OOM signatures, high spill, high GC time, high fetch wait, and task/input/shuffle skew. Reports include a per-query breakdown with job, stage, task, duration, and retry evidence when Spark SQL execution metadata is present, plus a structured resolution plan. Data-health plans are emitted first when parse errors, missing events, or incomplete logs mean the SHS input should be fixed before application tuning.
+
+When a full event log contains many `SparkListenerTaskStart` records without matching `SparkListenerTaskEnd` records, the agent emits `TASK_STARTS_WITHOUT_ENDS` and a `write-stall-triage` plan. This does not prove an object-store stall by itself. It tells operators to collect live executor thread dumps and look for Spark task threads blocked in OCI Object Storage or Parquet output paths such as `ObjectStorageClient.headObject`, `BmcDataStore.getFileStatus`, `BmcFilesystemImpl.create`, `HadoopOutputFile.create`, or `ParquetOutputWriter`. If confirmed, reduce final write fanout with `coalesce(N)` or `repartition(N)` before `write.parquet(...)`, target fewer larger files, and avoid allowing hundreds or thousands of concurrent writers to hit Object Storage metadata APIs.
 
 Large SHS directory mode is intended for already-downloaded Spark History Server directories such as `eventlog_v2_spark-application-*`. It scans all `events_*` files in numeric order, parses only app/job/stage/executor/SQL/signature-bearing events first, then deep-parses `SparkListenerTaskEnd` metrics only for failed or signature-bearing stages. This keeps OOM and executor-loss root-cause analysis practical on very large SHS trees. In this mode, report task totals are the targeted failed/suspect-stage task totals, not full-application task totals.
 
@@ -180,6 +182,7 @@ python3 spark-shs-prep/evals/event_log_agent_eval.py
 The eval runner is dependency-free and creates temporary Spark event-log fixtures for:
 
 - normalized OOM plus fetch-after-executor-loss resolution plans
+- unclosed task starts with write-stall triage guidance
 - large SHS directory mode with targeted failed-stage `TaskEnd` parsing
 - malformed event-log data-health findings
 

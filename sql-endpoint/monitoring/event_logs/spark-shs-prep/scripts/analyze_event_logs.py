@@ -163,6 +163,7 @@ FAST_EVENT_NAMES = {
     "org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionEnd",
 }
 TASK_END_MARKER = "SparkListenerTaskEnd"
+TASK_START_MARKER = "SparkListenerTaskStart"
 EVENT_NAME_LINE_RE = re.compile(r'"Event"\s*:\s*"([^"]+)"')
 EVENT_FILE_RE = re.compile(r"^events_(\d+)(?:_|$)")
 STAGE_ID_LINE_RE = re.compile(r'"Stage ID"\s*:\s*(-?\d+)')
@@ -347,7 +348,11 @@ class StageStats:
     completion_time: int = 0
     failure_reason: str = ""
     tasks_seen: int = 0
+    task_starts: int = 0
     failed_tasks: int = 0
+    started_task_min_launch_time: int = 0
+    started_task_max_launch_time: int = 0
+    started_task_samples: list[dict[str, Any]] = field(default_factory=list)
     end_reasons: Counter[str] = field(default_factory=Counter)
     executor_run_time: MetricSample = field(init=False)
     jvm_gc_time: MetricSample = field(init=False)
@@ -427,6 +432,34 @@ class StageStats:
             # nearby makes future output-volume checks straightforward.
             pass
 
+    def add_task_start(self, event: dict[str, Any]) -> None:
+        self.task_starts += 1
+        info = event.get("Task Info") or {}
+        if not isinstance(info, dict):
+            return
+
+        launch_time = to_int(info.get("Launch Time"))
+        if launch_time:
+            if not self.started_task_min_launch_time:
+                self.started_task_min_launch_time = launch_time
+            self.started_task_min_launch_time = min(self.started_task_min_launch_time, launch_time)
+            self.started_task_max_launch_time = max(self.started_task_max_launch_time, launch_time)
+
+        if len(self.started_task_samples) >= 20:
+            return
+        self.started_task_samples.append(
+            {
+                "task_id": to_int(info.get("Task ID"), -1),
+                "index": to_int(info.get("Index"), -1),
+                "attempt": to_int(info.get("Attempt"), 0),
+                "partition_id": to_int(info.get("Partition ID"), -1),
+                "executor_id": str(info.get("Executor ID") or ""),
+                "host": str(info.get("Host") or ""),
+                "launch_time": ms_to_iso(launch_time),
+                "locality": str(info.get("Locality") or ""),
+            }
+        )
+
     def summary(self) -> dict[str, Any]:
         run_total = self.executor_run_time.total
         return {
@@ -434,9 +467,14 @@ class StageStats:
             "attempt_id": self.attempt_id,
             "name": self.name,
             "declared_tasks": self.num_tasks_declared,
+            "task_starts": self.task_starts,
             "tasks_seen": self.tasks_seen,
+            "unclosed_task_starts": max(0, self.task_starts - self.tasks_seen),
             "failed_tasks": self.failed_tasks,
             "failure_reason": self.failure_reason,
+            "started_task_min_launch_time": ms_to_iso(self.started_task_min_launch_time),
+            "started_task_max_launch_time": ms_to_iso(self.started_task_max_launch_time),
+            "started_task_samples": self.started_task_samples,
             "submission_time": ms_to_iso(self.submission_time),
             "completion_time": ms_to_iso(self.completion_time),
             "duration_ms": max(0, self.completion_time - self.submission_time)
@@ -575,6 +613,14 @@ class SparkEventLogAnalyzer:
             info = event.get("Stage Info") or {}
             if isinstance(info, dict):
                 self.stage_for(info).update_from_info(info)
+        elif event_name == TASK_START_MARKER:
+            stage_id = to_int(event.get("Stage ID"), -1)
+            attempt_id = to_int(event.get("Stage Attempt ID"), 0)
+            if stage_id >= 0:
+                stage = self.stages.setdefault(
+                    (stage_id, attempt_id), StageStats(stage_id, attempt_id, self.max_samples)
+                )
+                stage.add_task_start(event)
         elif event_name == "SparkListenerTaskEnd":
             stage_id = to_int(event.get("Stage ID"), -1)
             attempt_id = to_int(event.get("Stage Attempt ID"), 0)
@@ -815,6 +861,41 @@ class SparkEventLogAnalyzer:
             self.add_stage_findings(stage)
 
     def add_stage_findings(self, stage: StageStats) -> None:
+        unclosed_task_starts = max(0, stage.task_starts - stage.tasks_seen)
+        if unclosed_task_starts and self.analysis_mode == "full-file":
+            unclosed_ratio = safe_ratio(unclosed_task_starts, stage.task_starts)
+            if not stage.completion_time or unclosed_ratio >= 0.05:
+                severity = "high" if unclosed_task_starts >= 10 or unclosed_ratio >= 0.25 else "medium"
+                self.add_finding(
+                    severity,
+                    "TASK_STARTS_WITHOUT_ENDS",
+                    "Stage has task starts without matching task end events",
+                    (
+                        f"Stage {stage.key} ({stage.name or 'unnamed'}) has "
+                        f"{unclosed_task_starts}/{stage.task_starts} task start event(s) "
+                        "without corresponding task end metrics in this event log."
+                    ),
+                    (
+                        "If the application is still running or Livy is still polling, collect live executor "
+                        "thread dumps for the sampled executors and check whether Spark task threads are blocked "
+                        "in object-store metadata/write paths such as ObjectStorageClient.headObject, "
+                        "BmcFilesystemImpl.create, HadoopOutputFile.create, or ParquetOutputWriter."
+                    ),
+                    {
+                        "stage": stage.key,
+                        "task_starts": stage.task_starts,
+                        "task_ends": stage.tasks_seen,
+                        "unclosed_task_starts": unclosed_task_starts,
+                        "started_task_min_launch_time": ms_to_iso(
+                            stage.started_task_min_launch_time
+                        ),
+                        "started_task_max_launch_time": ms_to_iso(
+                            stage.started_task_max_launch_time
+                        ),
+                        "started_task_samples": stage.started_task_samples,
+                    },
+                )
+
         if stage.tasks_seen and stage.failed_tasks:
             failed_rate = safe_ratio(stage.failed_tasks, stage.tasks_seen)
             if stage.failed_tasks >= 10 or failed_rate >= 0.02:
@@ -1036,6 +1117,38 @@ class SparkEventLogAnalyzer:
                 ],
                 [
                     "Do not tune application memory from an incomplete event log unless executor loss evidence is already decisive.",
+                ],
+            )
+
+        if "TASK_STARTS_WITHOUT_ENDS" in codes:
+            props = self.selected_spark_properties()
+            evidence = finding_details("TASK_STARTS_WITHOUT_ENDS")
+            for key in ("spark.executor.instances", "spark.executor.cores", "spark.task.cpus"):
+                if key in props:
+                    evidence.append(f"{key}={props[key]}")
+            add_plan(
+                5,
+                "write-stall-triage",
+                "Validate running task stalls with executor thread dumps",
+                "The event log contains task starts that never emitted task end metrics. In write-heavy stages, this often means tasks are stuck in output file creation, object-store metadata calls, Parquet writer open/close, or output commit rather than failing with an exception.",
+                "medium",
+                evidence,
+                [
+                    "For sampled executor IDs, run jcmd or jstack against the executor JVM and search for Executor task launch worker stacks for the sampled TIDs.",
+                    "Look for object-store/write stacks including ObjectStorageClient.headObject, BmcDataStore.getFileStatus, BmcFilesystemImpl.create, HadoopOutputFile.create, ParquetOutputWriter, FSDataOutputStream.close, or FileOutputCommitter.",
+                    "If the same stack is stable across multiple dumps, cancel the run rather than waiting for an event-log failure.",
+                ],
+                [
+                    "Before the final object-store write, reduce writer fanout with coalesce(N) or repartition(N), targeting larger Parquet files and tens to low hundreds of concurrent writers instead of one writer per available core.",
+                    "If a new session can be created, cap write-stage concurrency with spark.task.cpus or fewer executor cores; avoid pairing hundreds of cores per executor with thousands of tiny output partitions.",
+                    "When using partitionBy, repartition by the same partition columns and avoid low maxRecordsPerFile settings that multiply output files.",
+                ],
+                [
+                    "Thread dumps should no longer show large numbers of stage task threads parked in object-store headObject/create/write/close paths.",
+                    "The rerun should emit TaskEnd and StageCompleted events for the write stage and produce fewer, larger output files.",
+                ],
+                [
+                    "Rollback partition reduction if output files become too large for downstream consumers or if a shuffle introduced by repartition dominates total runtime without resolving writer stalls.",
                 ],
             )
 
@@ -1350,6 +1463,11 @@ class SparkEventLogAnalyzer:
                     },
                     "tasks": {
                         "total": sum(stage.tasks_seen for stage in query_stages),
+                        "started": sum(stage.task_starts for stage in query_stages),
+                        "unclosed_starts": sum(
+                            max(0, stage.task_starts - stage.tasks_seen)
+                            for stage in query_stages
+                        ),
                         "failed": failed_task_attempts,
                         "declared": sum(stage.num_tasks_declared for stage in query_stages),
                         "executor_run_time_ms_total": task_executor_run_time,
@@ -1423,6 +1541,11 @@ class SparkEventLogAnalyzer:
             },
             "tasks": {
                 "total": sum(stage.tasks_seen for stage in self.stages.values()),
+                "started": sum(stage.task_starts for stage in self.stages.values()),
+                "unclosed_starts": sum(
+                    max(0, stage.task_starts - stage.tasks_seen)
+                    for stage in self.stages.values()
+                ),
                 "failed": sum(stage.failed_tasks for stage in self.stages.values()),
             },
             "executors": {
@@ -1703,7 +1826,10 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Events parsed: {summary.get('parsed_event_count', summary['event_count'])}",
         f"- Jobs: {summary['jobs']['total']} total, {summary['jobs']['failed']} failed",
         f"- Stages: {summary['stages']['total_attempts']} attempts, {summary['stages']['failed_attempts']} failed",
-        f"- Tasks: {summary['tasks']['total']} total, {summary['tasks']['failed']} failed",
+        f"- Tasks: {summary['tasks']['total']} ended, "
+        f"{summary['tasks'].get('started', 0)} started, "
+        f"{summary['tasks'].get('unclosed_starts', 0)} unclosed starts, "
+        f"{summary['tasks']['failed']} failed",
         f"- Queries: {summary.get('queries', {}).get('total', 0)} total, "
         f"{summary.get('queries', {}).get('failed', 0)} failed, "
         f"{summary.get('queries', {}).get('with_retries', 0)} with retries",
@@ -1781,8 +1907,8 @@ def render_query_breakdown_table(queries: list[dict[str, Any]]) -> list[str]:
     if not queries:
         return ["No SQL query executions were recorded."]
     lines = [
-        "| Query | Status | Duration | Jobs | Stages | Tasks | Failed Tasks | Retries | Description |",
-        "|---|---|---:|---:|---:|---:|---:|---|---|",
+        "| Query | Status | Duration | Jobs | Stages | Tasks Ended | Unclosed Starts | Failed Tasks | Retries | Description |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---|---|",
     ]
     for query in queries:
         jobs = query.get("jobs", {})
@@ -1801,7 +1927,8 @@ def render_query_breakdown_table(queries: list[dict[str, Any]]) -> list[str]:
         lines.append(
             f"| `{query.get('execution_id')}` | {query.get('status') or 'unknown'} | "
             f"{duration} | {jobs.get('total', 0)} | {stage_text} | "
-            f"{tasks.get('total', 0)} | {tasks.get('failed', 0)} | "
+            f"{tasks.get('total', 0)} | {tasks.get('unclosed_starts', 0)} | "
+            f"{tasks.get('failed', 0)} | "
             f"{retry_text} | {description} |"
         )
     lines.extend(
@@ -1824,7 +1951,10 @@ def render_plan_list(label: str, values: list[str]) -> list[str]:
 def render_stage_table(stages: list[dict[str, Any]], value_kind: str) -> list[str]:
     if not stages:
         return ["No stages recorded."]
-    lines = ["| Stage | Name | Tasks | Failed | Value | GC Ratio |", "|---|---|---:|---:|---:|---:|"]
+    lines = [
+        "| Stage | Name | Started | Ended | Unclosed | Failed | Value | GC Ratio |",
+        "|---|---|---:|---:|---:|---:|---:|---:|",
+    ]
     for stage in stages:
         if value_kind == "spill":
             value = format_bytes(stage["memory_spilled"]["total"] + stage["disk_spilled"]["total"])
@@ -1833,7 +1963,8 @@ def render_stage_table(stages: list[dict[str, Any]], value_kind: str) -> list[st
         name = first_sentence(stage.get("name") or "", 80).replace("|", "\\|")
         lines.append(
             f"| {stage['stage_id']}.{stage['attempt_id']} | {name} | "
-            f"{stage['tasks_seen']} | {stage['failed_tasks']} | {value} | "
+            f"{stage.get('task_starts', 0)} | {stage['tasks_seen']} | "
+            f"{stage.get('unclosed_task_starts', 0)} | {stage['failed_tasks']} | {value} | "
             f"{stage['gc_time_ratio']:.1%} |"
         )
     return lines

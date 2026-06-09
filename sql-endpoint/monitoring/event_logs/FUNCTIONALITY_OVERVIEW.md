@@ -169,6 +169,7 @@ The agent evaluates both data-health and runtime-failure signals:
 | Memory pressure | Kubernetes or container `OOMKilled`, exit code `137`, JVM heap OOM, GC overhead, direct or native memory pressure. |
 | Shuffle failures | `FetchFailedException`, missing shuffle blocks, executor death before fetch failure. |
 | Resource pressure | High memory or disk spill, high fetch wait time, task runtime skew, input skew, shuffle-read skew. |
+| Write stalls | Task starts without matching task-end metrics, with guidance to validate object-store or Parquet writer stalls using executor thread dumps. |
 
 The agent also generates a structured resolution plan. A plan can include:
 
@@ -193,14 +194,15 @@ Example findings table:
 |---|---|---|
 | critical | `CONTAINER_OOM_OR_137` | Container or memory-overhead OOM signature found in executor removal evidence. |
 | high | `FETCH_FAILED_AFTER_EXECUTOR_LOSS` | A fetch failure and executor loss both appear, indicating that a downstream reducer likely discovered missing shuffle blocks after an executor died. |
+| high | `TASK_STARTS_WITHOUT_ENDS` | A stage has task starts that never emitted task-end metrics, indicating live or incomplete work requiring executor thread dump validation. |
 | high | `HIGH_STAGE_SPILL` | Stage `2.0` spilled a large amount of data across memory and disk. |
 | medium | `HIGH_FETCH_WAIT` | The failed stage spent a high share of executor runtime waiting on shuffle fetches. |
 
 Example query breakdown:
 
-| Query | Status | Duration | Jobs | Stages | Tasks | Failed Tasks | Retries | Description |
-|---|---|---:|---:|---:|---:|---:|---|---|
-| `42` | failed | 12.5 s | 1 | 1 unique / 2 attempts | 2 | 1 | yes; stages=1, task_attempts=0 | `select count(*) from eval_table` |
+| Query | Status | Duration | Jobs | Stages | Tasks Ended | Unclosed Starts | Failed Tasks | Retries | Description |
+|---|---|---:|---:|---:|---:|---:|---:|---|---|
+| `42` | failed | 12.5 s | 1 | 1 unique / 2 attempts | 2 | 0 | 1 | yes; stages=1, task_attempts=0 | `select count(*) from eval_table` |
 
 Example resolution-plan excerpt:
 
@@ -229,6 +231,7 @@ Typical outcomes are:
 | Corrupt or truncated Spark event lines | Data-health plan with parse-error samples and repair guidance | Re-download, repair, or regenerate event objects before relying on Spark UI analysis. |
 | `OOMKilled`, exit code `137`, or memory-overhead text in executor removal | Container OOM plan with memory-overhead and concurrency recommendations | Resize executor memory overhead, reduce executor cores, or use more smaller executors. |
 | `FetchFailedException` after executor loss | Shuffle-recovery plan that treats fetch failure as a symptom | Fix executor loss first, then rerun and verify missing shuffle blocks disappear. |
+| Task starts without task ends in a write stage | Write-stall triage plan with executor thread-dump patterns | Confirm whether tasks are blocked in object-store metadata/write paths, then reduce final write fanout with `coalesce` or `repartition`. |
 | High spill, high fetch wait, or skewed task metrics | Resource-pressure plan with partitioning and skew-handling recommendations | Increase or rebalance partitions, reduce row width, handle hot keys, and validate lower spill/fetch wait. |
 | Large `eventlog_v2_*` directory with many task events | Large SHS streaming report with targeted failed-stage metrics | Obtain practical root-cause feedback without parsing every task event in the application. |
 

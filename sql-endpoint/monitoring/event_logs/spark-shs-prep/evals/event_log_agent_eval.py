@@ -156,6 +156,37 @@ def success_task_end(stage_id: int, attempt_id: int = 0) -> dict[str, Any]:
     }
 
 
+def task_start(
+    stage_id: int,
+    task_id: int,
+    index: int,
+    executor_id: str,
+    host: str = "10.0.0.1",
+    attempt_id: int = 0,
+) -> dict[str, Any]:
+    return {
+        "Event": "SparkListenerTaskStart",
+        "Stage ID": stage_id,
+        "Stage Attempt ID": attempt_id,
+        "Task Info": {
+            "Task ID": task_id,
+            "Index": index,
+            "Attempt": 0,
+            "Partition ID": index,
+            "Launch Time": 1710000010000 + index,
+            "Executor ID": executor_id,
+            "Host": host,
+            "Locality": "PROCESS_LOCAL",
+            "Speculative": False,
+            "Getting Result Time": 0,
+            "Finish Time": 0,
+            "Failed": False,
+            "Killed": False,
+            "Accumulables": [],
+        },
+    }
+
+
 def eval_full_file_oom_resolution(tmpdir: Path) -> dict[str, Any]:
     source = tmpdir / "normalized-event-log"
     failed_stage = stage_info(
@@ -247,6 +278,48 @@ def eval_full_file_oom_resolution(tmpdir: Path) -> dict[str, Any]:
         "finding_codes": sorted(codes),
         "plan_scopes": sorted(scopes),
         "query_breakdown": report["query_breakdown"],
+    }
+
+
+def eval_unclosed_task_starts_write_stall(tmpdir: Path) -> dict[str, Any]:
+    source = tmpdir / "write-stall-event-log"
+    write_stage = stage_info(55, "write parquet files", tasks=12)
+    write_stage.pop("Completion Time", None)
+    events = base_events("spark-application-write-stall") + [
+        {
+            "Event": "SparkListenerJobStart",
+            "Job ID": 99,
+            "Submission Time": 1710000001000,
+            "Stage IDs": [55],
+            "Properties": {"spark.job.description": "write parquet"},
+        },
+        {"Event": "SparkListenerStageSubmitted", "Stage Info": write_stage},
+    ]
+    events.extend(
+        task_start(55, task_id=172000 + index, index=index, executor_id=str(index % 3))
+        for index in range(12)
+    )
+    write_events(source, events)
+
+    report = AGENT.SparkEventLogAnalyzer(source, **ANALYZER_KWARGS).analyze()
+    codes = finding_codes(report)
+    scopes = plan_scopes(report)
+    stages = {stage["stage_id"]: stage for stage in report["stages"]}
+    require_contains(
+        "finding codes",
+        codes,
+        {"APPLICATION_INCOMPLETE", "TASK_STARTS_WITHOUT_ENDS"},
+    )
+    require_contains("plan scopes", scopes, {"data-health", "write-stall-triage"})
+    require_equal("started task count", report["summary"]["tasks"]["started"], 12)
+    require_equal("ended task count", report["summary"]["tasks"]["total"], 0)
+    require_equal("unclosed starts", report["summary"]["tasks"]["unclosed_starts"], 12)
+    require_equal("stage unclosed starts", stages[55]["unclosed_task_starts"], 12)
+    return {
+        "event_count": report["summary"]["event_count"],
+        "finding_codes": sorted(codes),
+        "plan_scopes": sorted(scopes),
+        "stage": stages[55],
     }
 
 
@@ -368,6 +441,7 @@ def eval_parse_error_data_health(tmpdir: Path) -> dict[str, Any]:
 
 EVALS: list[tuple[str, Callable[[Path], dict[str, Any]]]] = [
     ("full_file_oom_resolution", eval_full_file_oom_resolution),
+    ("unclosed_task_starts_write_stall", eval_unclosed_task_starts_write_stall),
     ("large_shs_targeted_deep_parse", eval_large_shs_targeted_deep_parse),
     ("parse_error_data_health", eval_parse_error_data_health),
 ]
