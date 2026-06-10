@@ -200,6 +200,7 @@ log " Starting Spark History Server"
 log " Log dir : $OUTPUT_DIR"
 log " Repairs : ${SPARK_EVENT_REPAIR_REPORT_DIR:-${OUTPUT_DIR}/_repair-reports}"
 log " Reports : ${SPARK_EVENT_AGENT_REPORT_DIR:-${OUTPUT_DIR}/_agent-reports}"
+log " RAPIDS : ${SPARK_EVENT_AGENT_RAPIDS_QUALIFICATION_ENABLED:-false} (${SPARK_EVENT_AGENT_RAPIDS_QUALIFICATION_OUTPUT_DIR:-${OUTPUT_DIR}/_rapids-qualification})"
 log " UI      : http://0.0.0.0:${SHS_PORT}"
 log "═══════════════════════════════════════════════"
 

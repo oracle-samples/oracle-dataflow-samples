@@ -10,11 +10,15 @@ reports without requiring a running History Server.
 from __future__ import annotations
 
 import argparse
+import csv
 import datetime as dt
 import json
 import os
 import re
+import shlex
+import shutil
 import statistics
+import subprocess
 import time
 from collections import Counter
 from dataclasses import dataclass, field
@@ -25,6 +29,12 @@ from typing import Any
 SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
 SUCCESS_REASONS = {"Success", "TaskCommitDenied"}
 DEFAULT_MAX_SAMPLES = 5000
+DEFAULT_RAPIDS_OUTPUT_DIR = "/shs-logs/_rapids-qualification"
+DEFAULT_IGNORED_DIR_NAMES = {
+    "_agent-reports",
+    "_repair-reports",
+    "_rapids-qualification",
+}
 
 
 SIGNATURES = [
@@ -163,10 +173,53 @@ FAST_EVENT_NAMES = {
     "org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionEnd",
 }
 TASK_END_MARKER = "SparkListenerTaskEnd"
+TASK_START_MARKER = "SparkListenerTaskStart"
 EVENT_NAME_LINE_RE = re.compile(r'"Event"\s*:\s*"([^"]+)"')
 EVENT_FILE_RE = re.compile(r"^events_(\d+)(?:_|$)")
 STAGE_ID_LINE_RE = re.compile(r'"Stage ID"\s*:\s*(-?\d+)')
 STAGE_ATTEMPT_LINE_RE = re.compile(r'"Stage Attempt ID"\s*:\s*(-?\d+)')
+
+RAPIDS_APP_COLUMNS = [
+    "App Name",
+    "App ID",
+    "Recommendation",
+    "Estimated GPU Speedup Category",
+    "Estimated GPU Speedup",
+    "Estimated GPU Duration",
+    "Estimated GPU Time Saved",
+    "App Duration",
+    "Executor CPU Time Percent",
+    "GPU Opportunity",
+    "Unsupported Execs",
+    "Unsupported Expressions",
+    "Potential Problems",
+]
+RAPIDS_STAGE_COLUMNS = [
+    "Stage ID",
+    "Stage Task Duration",
+    "Unsupported Task Duration",
+    "Estimated GPU Duration",
+    "Estimated GPU Speedup",
+    "Stage Estimated",
+]
+RAPIDS_EXEC_COLUMNS = [
+    "SQL ID",
+    "Exec Name",
+    "Expression Name",
+    "Exec Duration",
+    "Exec Is Supported",
+    "Action",
+    "Exec Stages",
+]
+RAPIDS_OPERATOR_COLUMNS = [
+    "SQL ID",
+    "Operator Type",
+    "Operator Name",
+    "Supported",
+    "Count",
+    "Duration",
+    "Speedup",
+]
 
 
 def utc_now() -> str:
@@ -300,6 +353,399 @@ def might_have_signature(line: str) -> bool:
     return any(term in line for term in SIGNATURE_PREFILTER_TERMS)
 
 
+def csv_lookup_key(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", name.strip().lower()).strip()
+
+
+def csv_field(row: dict[str, str], *names: str) -> str:
+    if not row:
+        return ""
+    normalized = {csv_lookup_key(key): value for key, value in row.items()}
+    for name in names:
+        value = normalized.get(csv_lookup_key(name))
+        if value not in (None, ""):
+            return str(value)
+    return ""
+
+
+def compact_csv_row(
+    row: dict[str, str], preferred_columns: list[str], fallback_columns: int = 10
+) -> dict[str, str]:
+    compact: dict[str, str] = {}
+    for column in preferred_columns:
+        value = csv_field(row, column)
+        if value not in (None, ""):
+            compact[column] = value
+    if compact:
+        return compact
+    for key, value in row.items():
+        if value in (None, ""):
+            continue
+        compact[str(key)] = str(value)
+        if len(compact) >= fallback_columns:
+            break
+    return compact
+
+
+def numeric_csv_field(row: dict[str, str], *names: str) -> float:
+    value = csv_field(row, *names)
+    if not value:
+        return 0.0
+    match = re.search(r"-?\d+(?:\.\d+)?", value.replace(",", ""))
+    if not match:
+        return 0.0
+    try:
+        return float(match.group(0))
+    except ValueError:
+        return 0.0
+
+
+def read_csv_rows(path: Path, limit: int = 1000) -> list[dict[str, str]]:
+    if not path.is_file():
+        return []
+    rows: list[dict[str, str]] = []
+    with path.open("r", encoding="utf-8-sig", newline="", errors="replace") as handle:
+        reader = csv.DictReader(handle)
+        for row in reader:
+            rows.append(
+                {
+                    str(key): "" if value is None else str(value)
+                    for key, value in row.items()
+                    if key is not None
+                }
+            )
+            if len(rows) >= limit:
+                break
+    return rows
+
+
+def read_text_head(path: Path, max_lines: int = 60) -> list[str]:
+    if not path.is_file():
+        return []
+    lines: list[str] = []
+    with path.open("r", encoding="utf-8", errors="replace") as handle:
+        for line in handle:
+            lines.append(line.rstrip())
+            if len(lines) >= max_lines:
+                break
+    return lines
+
+
+def text_tail(text: str, limit: int = 4000) -> str:
+    if len(text) <= limit:
+        return text
+    return text[-limit:]
+
+
+def text_head(text: str, limit: int = 4000) -> str:
+    if len(text) <= limit:
+        return text
+    return text[: limit - 3] + "..."
+
+
+def compact_command_for_report(command: list[str]) -> list[str]:
+    return [text_head(part, 1000) for part in command]
+
+
+def local_file_uri(path: Path) -> str:
+    return path.resolve().as_uri()
+
+
+def is_rapids_run_dir(path: Path) -> bool:
+    return (
+        (path / "qualification_summary.csv").is_file()
+        or (path / "qualification_statistics.csv").is_file()
+        or (path / "qual_core_output" / "apps_summary.csv").is_file()
+        or (path / "qual_core_output" / "status.csv").is_file()
+    )
+
+
+def latest_rapids_run_dir(output_dir: Path) -> Path | None:
+    if not output_dir.exists():
+        return None
+    if output_dir.is_dir() and is_rapids_run_dir(output_dir):
+        return output_dir
+    candidates = [
+        path
+        for path in output_dir.iterdir()
+        if path.is_dir() and is_rapids_run_dir(path)
+    ]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda path: path.stat().st_mtime_ns)
+
+
+def unsupported_exec_rows(rows: list[dict[str, str]], limit: int = 20) -> list[dict[str, str]]:
+    selected: list[dict[str, str]] = []
+    for row in rows:
+        supported = csv_field(row, "Exec Is Supported", "Supported").strip().lower()
+        action = csv_field(row, "Action").strip().lower()
+        if supported in {"false", "no", "n", "0"} or action not in {"", "none"}:
+            selected.append(row)
+        if len(selected) >= limit:
+            break
+    return selected
+
+
+def parse_rapids_per_app_outputs(run_dir: Path) -> dict[str, dict[str, Any]]:
+    qual_core = run_dir / "qual_core_output"
+    metrics_root = qual_core / "qual_metrics"
+    raw_root = qual_core / "raw_metrics"
+    tuning_root = qual_core / "tuning_apps"
+    per_app: dict[str, dict[str, Any]] = {}
+    if not metrics_root.is_dir():
+        return per_app
+
+    for app_dir in sorted(path for path in metrics_root.iterdir() if path.is_dir()):
+        app_id = app_dir.name
+        stages = sorted(
+            read_csv_rows(app_dir / "stages.csv", limit=200),
+            key=lambda row: numeric_csv_field(
+                row, "Unsupported Task Duration", "Stage Task Duration", "Exec Duration"
+            ),
+            reverse=True,
+        )[:20]
+        exec_rows = unsupported_exec_rows(read_csv_rows(app_dir / "execs.csv", limit=1000))
+        operators = read_csv_rows(app_dir / "operators_stats.csv", limit=200)[:20]
+        unsupported_operators = read_csv_rows(
+            app_dir / "unsupported_operators.csv", limit=200
+        )[:20]
+
+        raw_dir = raw_root / app_id
+        write_operations = read_csv_rows(raw_dir / "write_operations.csv", limit=50)[:20]
+        data_sources = read_csv_rows(raw_dir / "data_source_information.csv", limit=50)[:20]
+
+        tuning_dir = tuning_root / app_id
+        per_app[app_id] = {
+            "app_output_dir": str(app_dir),
+            "stages": [compact_csv_row(row, RAPIDS_STAGE_COLUMNS) for row in stages],
+            "unsupported_execs": [
+                compact_csv_row(row, RAPIDS_EXEC_COLUMNS) for row in exec_rows
+            ],
+            "operators": [
+                compact_csv_row(row, RAPIDS_OPERATOR_COLUMNS) for row in operators
+            ],
+            "unsupported_operators": [
+                compact_csv_row(row, RAPIDS_OPERATOR_COLUMNS) for row in unsupported_operators
+            ],
+            "write_operations": [
+                compact_csv_row(row, list(row.keys()), fallback_columns=12)
+                for row in write_operations
+            ],
+            "data_sources": [
+                compact_csv_row(row, list(row.keys()), fallback_columns=12)
+                for row in data_sources
+            ],
+            "tuning_recommendations": read_text_head(
+                tuning_dir / "recommendations.log", max_lines=80
+            ),
+        }
+    return per_app
+
+
+def parse_rapids_qualification_output(output_dir: Path) -> dict[str, Any] | None:
+    run_dir = latest_rapids_run_dir(output_dir)
+    if run_dir is None:
+        return None
+
+    summary_file = run_dir / "qualification_summary.csv"
+    statistics_file = run_dir / "qualification_statistics.csv"
+    apps_summary_file = run_dir / "qual_core_output" / "apps_summary.csv"
+    status_file = run_dir / "qual_core_output" / "status.csv"
+    app_rows = read_csv_rows(summary_file, limit=5000) or read_csv_rows(
+        apps_summary_file, limit=5000
+    )
+    status_rows = read_csv_rows(status_file, limit=500)
+    statistics_rows = read_csv_rows(statistics_file, limit=500)
+    return {
+        "status": "parsed",
+        "output_dir": str(output_dir),
+        "run_dir": str(run_dir),
+        "summary_file": str(summary_file) if summary_file.is_file() else "",
+        "statistics_file": str(statistics_file) if statistics_file.is_file() else "",
+        "apps_summary_file": str(apps_summary_file) if apps_summary_file.is_file() else "",
+        "status_file": str(status_file) if status_file.is_file() else "",
+        "apps": app_rows,
+        "app_count": len(app_rows),
+        "status_rows": status_rows[:20],
+        "statistics_rows": statistics_rows[:20],
+        "per_app": parse_rapids_per_app_outputs(run_dir),
+    }
+
+
+def rapids_app_row_matches(row: dict[str, str], app_id: str, app_name: str) -> bool:
+    row_app_id = csv_field(row, "App ID", "Application ID")
+    row_app_name = csv_field(row, "App Name", "Application Name")
+    if app_id and row_app_id and (row_app_id == app_id or app_id in row_app_id):
+        return True
+    if app_name and row_app_name and row_app_name == app_name:
+        return True
+    return False
+
+
+def rapids_app_dir_matches(directory_name: str, app_id: str) -> bool:
+    return bool(app_id and (directory_name == app_id or directory_name.startswith(app_id)))
+
+
+def rapids_payload_for_report(
+    rapids_context: dict[str, Any] | None, report: dict[str, Any]
+) -> dict[str, Any] | None:
+    if not rapids_context:
+        return None
+    summary = report.get("summary", {})
+    app_id = str(summary.get("app_id") or "")
+    app_name = str(summary.get("app_name") or "")
+    all_apps = rapids_context.get("apps", [])
+    matched_rows = [
+        row for row in all_apps if rapids_app_row_matches(row, app_id, app_name)
+    ]
+    if not matched_rows and len(all_apps) == 1:
+        matched_rows = all_apps
+
+    per_app_outputs = rapids_context.get("per_app", {})
+    matched_per_app = {
+        app_dir: payload
+        for app_dir, payload in per_app_outputs.items()
+        if rapids_app_dir_matches(app_dir, app_id)
+    }
+    if not matched_per_app and len(per_app_outputs) == 1 and matched_rows:
+        matched_per_app = per_app_outputs
+
+    payload = {
+        "status": rapids_context.get("status", "unknown"),
+        "platform": rapids_context.get("platform"),
+        "output_dir": rapids_context.get("output_dir"),
+        "run_dir": rapids_context.get("run_dir"),
+        "command": rapids_context.get("command", []),
+        "eventlogs": rapids_context.get("eventlogs", ""),
+        "app_count": rapids_context.get("app_count", len(all_apps)),
+        "matched_app_count": len(matched_rows),
+        "matched_apps": [
+            compact_csv_row(row, RAPIDS_APP_COLUMNS) for row in matched_rows[:5]
+        ],
+        "top_apps": [
+            compact_csv_row(row, RAPIDS_APP_COLUMNS) for row in all_apps[:5]
+        ],
+        "status_rows": [
+            compact_csv_row(row, list(row.keys()), fallback_columns=12)
+            for row in rapids_context.get("status_rows", [])[:10]
+        ],
+        "statistics_rows": [
+            compact_csv_row(row, list(row.keys()), fallback_columns=12)
+            for row in rapids_context.get("statistics_rows", [])[:10]
+        ],
+        "per_app": matched_per_app,
+    }
+    if rapids_context.get("error"):
+        payload["error"] = rapids_context["error"]
+    if rapids_context.get("stdout_tail"):
+        payload["stdout_tail"] = rapids_context["stdout_tail"]
+    if rapids_context.get("stderr_tail"):
+        payload["stderr_tail"] = rapids_context["stderr_tail"]
+    return payload
+
+
+def summarize_rapids_for_index(payload: dict[str, Any] | None) -> dict[str, Any]:
+    if not payload:
+        return {"status": "not_configured"}
+    row = payload.get("matched_apps", [{}])[0] if payload.get("matched_apps") else {}
+    return {
+        "status": payload.get("status", "unknown"),
+        "matched_app_count": payload.get("matched_app_count", 0),
+        "recommendation": csv_field(row, "Recommendation"),
+        "speedup_category": csv_field(row, "Estimated GPU Speedup Category"),
+        "estimated_speedup": csv_field(row, "Estimated GPU Speedup"),
+    }
+
+
+def run_rapids_qualification(args: argparse.Namespace, logs: list[Path]) -> dict[str, Any]:
+    output_dir = Path(args.rapids_output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    tool = shutil.which("spark_rapids")
+    if not tool:
+        return {
+            "status": "tool_missing",
+            "output_dir": str(output_dir),
+            "error": "`spark_rapids` was not found in PATH.",
+        }
+
+    eventlogs = args.rapids_eventlogs.strip()
+    if not eventlogs:
+        eventlogs = ",".join(local_file_uri(path) for path in logs)
+    if not eventlogs:
+        return {
+            "status": "skipped",
+            "output_dir": str(output_dir),
+            "error": "No Spark event logs were available for RAPIDS qualification.",
+        }
+
+    command = [
+        tool,
+        "qualification",
+        "--platform",
+        args.rapids_platform,
+        "--eventlogs",
+        eventlogs,
+        "--output_folder",
+        str(output_dir),
+    ]
+    if args.rapids_extra_args.strip():
+        try:
+            command.extend(shlex.split(args.rapids_extra_args))
+        except ValueError as exc:
+            return {
+                "status": "failed",
+                "output_dir": str(output_dir),
+                "eventlogs": eventlogs,
+                "error": f"Could not parse RAPIDS extra args: {exc}",
+            }
+
+    print(f"[agent] running RAPIDS qualification for {len(logs)} discovered event log(s)")
+    completed = subprocess.run(command, capture_output=True, text=True, check=False)
+    return {
+        "status": "completed" if completed.returncode == 0 else "failed",
+        "platform": args.rapids_platform,
+        "output_dir": str(output_dir),
+        "eventlogs": text_head(eventlogs),
+        "command": compact_command_for_report(command),
+        "returncode": completed.returncode,
+        "stdout_tail": text_tail(completed.stdout),
+        "stderr_tail": text_tail(completed.stderr),
+        "error": "" if completed.returncode == 0 else "RAPIDS qualification exited non-zero.",
+    }
+
+
+def build_rapids_context(args: argparse.Namespace, logs: list[Path]) -> dict[str, Any] | None:
+    output_dir = Path(args.rapids_output_dir)
+    run_result: dict[str, Any] | None = None
+    if args.rapids_qualification:
+        run_result = run_rapids_qualification(args, logs)
+
+    parsed = parse_rapids_qualification_output(output_dir)
+    if parsed:
+        if run_result:
+            parsed.update(
+                {
+                    "status": run_result.get("status", parsed.get("status")),
+                    "platform": run_result.get("platform", args.rapids_platform),
+                    "command": run_result.get("command", []),
+                    "eventlogs": run_result.get("eventlogs", ""),
+                    "returncode": run_result.get("returncode"),
+                    "stdout_tail": run_result.get("stdout_tail", ""),
+                    "stderr_tail": run_result.get("stderr_tail", ""),
+                    "error": run_result.get("error", ""),
+                }
+            )
+        else:
+            parsed["platform"] = args.rapids_platform
+        return parsed
+
+    if run_result:
+        return run_result
+    return None
+
+
 @dataclass
 class MetricSample:
     max_samples: int
@@ -347,7 +793,11 @@ class StageStats:
     completion_time: int = 0
     failure_reason: str = ""
     tasks_seen: int = 0
+    task_starts: int = 0
     failed_tasks: int = 0
+    started_task_min_launch_time: int = 0
+    started_task_max_launch_time: int = 0
+    started_task_samples: list[dict[str, Any]] = field(default_factory=list)
     end_reasons: Counter[str] = field(default_factory=Counter)
     executor_run_time: MetricSample = field(init=False)
     jvm_gc_time: MetricSample = field(init=False)
@@ -427,6 +877,34 @@ class StageStats:
             # nearby makes future output-volume checks straightforward.
             pass
 
+    def add_task_start(self, event: dict[str, Any]) -> None:
+        self.task_starts += 1
+        info = event.get("Task Info") or {}
+        if not isinstance(info, dict):
+            return
+
+        launch_time = to_int(info.get("Launch Time"))
+        if launch_time:
+            if not self.started_task_min_launch_time:
+                self.started_task_min_launch_time = launch_time
+            self.started_task_min_launch_time = min(self.started_task_min_launch_time, launch_time)
+            self.started_task_max_launch_time = max(self.started_task_max_launch_time, launch_time)
+
+        if len(self.started_task_samples) >= 20:
+            return
+        self.started_task_samples.append(
+            {
+                "task_id": to_int(info.get("Task ID"), -1),
+                "index": to_int(info.get("Index"), -1),
+                "attempt": to_int(info.get("Attempt"), 0),
+                "partition_id": to_int(info.get("Partition ID"), -1),
+                "executor_id": str(info.get("Executor ID") or ""),
+                "host": str(info.get("Host") or ""),
+                "launch_time": ms_to_iso(launch_time),
+                "locality": str(info.get("Locality") or ""),
+            }
+        )
+
     def summary(self) -> dict[str, Any]:
         run_total = self.executor_run_time.total
         return {
@@ -434,9 +912,14 @@ class StageStats:
             "attempt_id": self.attempt_id,
             "name": self.name,
             "declared_tasks": self.num_tasks_declared,
+            "task_starts": self.task_starts,
             "tasks_seen": self.tasks_seen,
+            "unclosed_task_starts": max(0, self.task_starts - self.tasks_seen),
             "failed_tasks": self.failed_tasks,
             "failure_reason": self.failure_reason,
+            "started_task_min_launch_time": ms_to_iso(self.started_task_min_launch_time),
+            "started_task_max_launch_time": ms_to_iso(self.started_task_max_launch_time),
+            "started_task_samples": self.started_task_samples,
             "submission_time": ms_to_iso(self.submission_time),
             "completion_time": ms_to_iso(self.completion_time),
             "duration_ms": max(0, self.completion_time - self.submission_time)
@@ -575,6 +1058,14 @@ class SparkEventLogAnalyzer:
             info = event.get("Stage Info") or {}
             if isinstance(info, dict):
                 self.stage_for(info).update_from_info(info)
+        elif event_name == TASK_START_MARKER:
+            stage_id = to_int(event.get("Stage ID"), -1)
+            attempt_id = to_int(event.get("Stage Attempt ID"), 0)
+            if stage_id >= 0:
+                stage = self.stages.setdefault(
+                    (stage_id, attempt_id), StageStats(stage_id, attempt_id, self.max_samples)
+                )
+                stage.add_task_start(event)
         elif event_name == "SparkListenerTaskEnd":
             stage_id = to_int(event.get("Stage ID"), -1)
             attempt_id = to_int(event.get("Stage Attempt ID"), 0)
@@ -815,6 +1306,41 @@ class SparkEventLogAnalyzer:
             self.add_stage_findings(stage)
 
     def add_stage_findings(self, stage: StageStats) -> None:
+        unclosed_task_starts = max(0, stage.task_starts - stage.tasks_seen)
+        if unclosed_task_starts and self.analysis_mode == "full-file":
+            unclosed_ratio = safe_ratio(unclosed_task_starts, stage.task_starts)
+            if not stage.completion_time or unclosed_ratio >= 0.05:
+                severity = "high" if unclosed_task_starts >= 10 or unclosed_ratio >= 0.25 else "medium"
+                self.add_finding(
+                    severity,
+                    "TASK_STARTS_WITHOUT_ENDS",
+                    "Stage has task starts without matching task end events",
+                    (
+                        f"Stage {stage.key} ({stage.name or 'unnamed'}) has "
+                        f"{unclosed_task_starts}/{stage.task_starts} task start event(s) "
+                        "without corresponding task end metrics in this event log."
+                    ),
+                    (
+                        "If the application is still running or Livy is still polling, collect live executor "
+                        "thread dumps for the sampled executors and check whether Spark task threads are blocked "
+                        "in object-store metadata/write paths such as ObjectStorageClient.headObject, "
+                        "BmcFilesystemImpl.create, HadoopOutputFile.create, or ParquetOutputWriter."
+                    ),
+                    {
+                        "stage": stage.key,
+                        "task_starts": stage.task_starts,
+                        "task_ends": stage.tasks_seen,
+                        "unclosed_task_starts": unclosed_task_starts,
+                        "started_task_min_launch_time": ms_to_iso(
+                            stage.started_task_min_launch_time
+                        ),
+                        "started_task_max_launch_time": ms_to_iso(
+                            stage.started_task_max_launch_time
+                        ),
+                        "started_task_samples": stage.started_task_samples,
+                    },
+                )
+
         if stage.tasks_seen and stage.failed_tasks:
             failed_rate = safe_ratio(stage.failed_tasks, stage.tasks_seen)
             if stage.failed_tasks >= 10 or failed_rate >= 0.02:
@@ -1036,6 +1562,38 @@ class SparkEventLogAnalyzer:
                 ],
                 [
                     "Do not tune application memory from an incomplete event log unless executor loss evidence is already decisive.",
+                ],
+            )
+
+        if "TASK_STARTS_WITHOUT_ENDS" in codes:
+            props = self.selected_spark_properties()
+            evidence = finding_details("TASK_STARTS_WITHOUT_ENDS")
+            for key in ("spark.executor.instances", "spark.executor.cores", "spark.task.cpus"):
+                if key in props:
+                    evidence.append(f"{key}={props[key]}")
+            add_plan(
+                5,
+                "write-stall-triage",
+                "Validate running task stalls with executor thread dumps",
+                "The event log contains task starts that never emitted task end metrics. In write-heavy stages, this often means tasks are stuck in output file creation, object-store metadata calls, Parquet writer open/close, or output commit rather than failing with an exception.",
+                "medium",
+                evidence,
+                [
+                    "For sampled executor IDs, run jcmd or jstack against the executor JVM and search for Executor task launch worker stacks for the sampled TIDs.",
+                    "Look for object-store/write stacks including ObjectStorageClient.headObject, BmcDataStore.getFileStatus, BmcFilesystemImpl.create, HadoopOutputFile.create, ParquetOutputWriter, FSDataOutputStream.close, or FileOutputCommitter.",
+                    "If the same stack is stable across multiple dumps, cancel the run rather than waiting for an event-log failure.",
+                ],
+                [
+                    "Before the final object-store write, reduce writer fanout with coalesce(N) or repartition(N), targeting larger Parquet files and tens to low hundreds of concurrent writers instead of one writer per available core.",
+                    "If a new session can be created, cap write-stage concurrency with spark.task.cpus or fewer executor cores; avoid pairing hundreds of cores per executor with thousands of tiny output partitions.",
+                    "When using partitionBy, repartition by the same partition columns and avoid low maxRecordsPerFile settings that multiply output files.",
+                ],
+                [
+                    "Thread dumps should no longer show large numbers of stage task threads parked in object-store headObject/create/write/close paths.",
+                    "The rerun should emit TaskEnd and StageCompleted events for the write stage and produce fewer, larger output files.",
+                ],
+                [
+                    "Rollback partition reduction if output files become too large for downstream consumers or if a shuffle introduced by repartition dominates total runtime without resolving writer stalls.",
                 ],
             )
 
@@ -1350,6 +1908,11 @@ class SparkEventLogAnalyzer:
                     },
                     "tasks": {
                         "total": sum(stage.tasks_seen for stage in query_stages),
+                        "started": sum(stage.task_starts for stage in query_stages),
+                        "unclosed_starts": sum(
+                            max(0, stage.task_starts - stage.tasks_seen)
+                            for stage in query_stages
+                        ),
                         "failed": failed_task_attempts,
                         "declared": sum(stage.num_tasks_declared for stage in query_stages),
                         "executor_run_time_ms_total": task_executor_run_time,
@@ -1423,6 +1986,11 @@ class SparkEventLogAnalyzer:
             },
             "tasks": {
                 "total": sum(stage.tasks_seen for stage in self.stages.values()),
+                "started": sum(stage.task_starts for stage in self.stages.values()),
+                "unclosed_starts": sum(
+                    max(0, stage.task_starts - stage.tasks_seen)
+                    for stage in self.stages.values()
+                ),
                 "failed": sum(stage.failed_tasks for stage in self.stages.values()),
             },
             "executors": {
@@ -1629,18 +2197,31 @@ class LargeShsDirectoryAnalyzer(SparkEventLogAnalyzer):
         return parsed_tasks
 
 
-def discover_logs(input_dir: Path, output_dir: Path) -> list[Path]:
+def path_is_under(path: Path, directory: Path) -> bool:
+    return path == directory or directory in path.parents
+
+
+def should_ignore_path(path: Path, ignored_dirs: list[Path]) -> bool:
+    if any(part in DEFAULT_IGNORED_DIR_NAMES for part in path.parts):
+        return True
+    try:
+        resolved = path.resolve()
+    except OSError:
+        return True
+    return any(path_is_under(resolved, directory) for directory in ignored_dirs)
+
+
+def discover_logs(
+    input_dir: Path, output_dir: Path, extra_ignored_dirs: list[Path] | None = None
+) -> list[Path]:
     candidates: list[Path] = []
-    output_dir = output_dir.resolve()
+    ignored_dirs = [output_dir.resolve()]
+    ignored_dirs.extend(directory.resolve() for directory in extra_ignored_dirs or [])
     ignored_suffixes = {".json", ".md", ".crc", ".tmp"}
     for path in sorted(input_dir.rglob("*")):
         if not path.is_file():
             continue
-        try:
-            resolved = path.resolve()
-        except OSError:
-            continue
-        if output_dir == resolved or output_dir in resolved.parents:
+        if should_ignore_path(path, ignored_dirs):
             continue
         if path.name.startswith(".") or path.name.endswith(".inprogress"):
             continue
@@ -1652,9 +2233,12 @@ def discover_logs(input_dir: Path, output_dir: Path) -> list[Path]:
     return candidates
 
 
-def discover_shs_eventlog_dirs(input_dir: Path, output_dir: Path) -> list[Path]:
+def discover_shs_eventlog_dirs(
+    input_dir: Path, output_dir: Path, extra_ignored_dirs: list[Path] | None = None
+) -> list[Path]:
     candidates: list[Path] = []
-    output_dir = output_dir.resolve()
+    ignored_dirs = [output_dir.resolve()]
+    ignored_dirs.extend(directory.resolve() for directory in extra_ignored_dirs or [])
     if input_dir.name.startswith("eventlog_v2_"):
         paths = [input_dir]
     else:
@@ -1663,11 +2247,7 @@ def discover_shs_eventlog_dirs(input_dir: Path, output_dir: Path) -> list[Path]:
     for path in paths:
         if not path.is_dir():
             continue
-        try:
-            resolved = path.resolve()
-        except OSError:
-            continue
-        if output_dir == resolved or output_dir in resolved.parents:
+        if should_ignore_path(path, ignored_dirs):
             continue
         if event_files_for(path):
             candidates.append(path)
@@ -1703,15 +2283,19 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Events parsed: {summary.get('parsed_event_count', summary['event_count'])}",
         f"- Jobs: {summary['jobs']['total']} total, {summary['jobs']['failed']} failed",
         f"- Stages: {summary['stages']['total_attempts']} attempts, {summary['stages']['failed_attempts']} failed",
-        f"- Tasks: {summary['tasks']['total']} total, {summary['tasks']['failed']} failed",
+        f"- Tasks: {summary['tasks']['total']} ended, "
+        f"{summary['tasks'].get('started', 0)} started, "
+        f"{summary['tasks'].get('unclosed_starts', 0)} unclosed starts, "
+        f"{summary['tasks']['failed']} failed",
         f"- Queries: {summary.get('queries', {}).get('total', 0)} total, "
         f"{summary.get('queries', {}).get('failed', 0)} failed, "
         f"{summary.get('queries', {}).get('with_retries', 0)} with retries",
         f"- Executors: {summary['executors']['seen']} seen, {summary['executors']['removed']} removed",
         "",
-        "## Findings",
-        "",
     ]
+
+    lines.extend(render_rapids_qualification_markdown(report.get("rapids_qualification")))
+    lines.extend(["## Findings", ""])
 
     if not findings:
         lines.append("No findings.")
@@ -1777,12 +2361,126 @@ def render_markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def markdown_cell(value: Any, limit: int = 120) -> str:
+    return first_sentence(str(value or ""), limit).replace("|", "\\|")
+
+
+def render_generic_rows(rows: list[dict[str, Any]], columns: list[str], limit: int) -> list[str]:
+    if not rows:
+        return ["No rows recorded."]
+    visible_columns = [column for column in columns if any(row.get(column) for row in rows)]
+    if not visible_columns:
+        visible_columns = list(rows[0].keys())[:6]
+    lines = [
+        "| " + " | ".join(visible_columns) + " |",
+        "| " + " | ".join("---" for _ in visible_columns) + " |",
+    ]
+    for row in rows[:limit]:
+        values = [markdown_cell(row.get(column), 120) for column in visible_columns]
+        lines.append("| " + " | ".join(values) + " |")
+    return lines
+
+
+def render_rapids_qualification_markdown(payload: dict[str, Any] | None) -> list[str]:
+    if not payload:
+        return []
+    lines = [
+        "## RAPIDS Qualification",
+        "",
+        f"- Status: `{payload.get('status') or 'unknown'}`",
+        f"- Platform: `{payload.get('platform') or 'unknown'}`",
+        f"- Output: `{payload.get('run_dir') or payload.get('output_dir') or 'unknown'}`",
+        f"- Matched applications: {payload.get('matched_app_count', 0)} of {payload.get('app_count', 0)}",
+    ]
+    if payload.get("error"):
+        lines.append(f"- Error: {markdown_cell(payload['error'], 220)}")
+
+    app_rows = payload.get("matched_apps") or payload.get("top_apps") or []
+    if app_rows:
+        lines.extend(
+            [
+                "",
+                "| App | Recommendation | Speedup Category | Estimated Speedup | Notes |",
+                "|---|---|---|---:|---|",
+            ]
+        )
+        for row in app_rows[:5]:
+            app = csv_field(row, "App Name", "App ID") or "unknown"
+            recommendation = csv_field(row, "Recommendation")
+            category = csv_field(row, "Estimated GPU Speedup Category")
+            speedup = csv_field(row, "Estimated GPU Speedup")
+            notes = (
+                csv_field(row, "Potential Problems")
+                or csv_field(row, "Unsupported Execs")
+                or csv_field(row, "Unsupported Expressions")
+            )
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        markdown_cell(app, 80),
+                        markdown_cell(recommendation, 80),
+                        markdown_cell(category, 80),
+                        markdown_cell(speedup, 80),
+                        markdown_cell(notes, 100),
+                    ]
+                )
+                + " |"
+            )
+
+    per_app = payload.get("per_app") or {}
+    for app_id, app_payload in list(per_app.items())[:3]:
+        lines.extend(["", f"### RAPIDS Details: `{app_id}`", ""])
+        unsupported = app_payload.get("unsupported_execs", [])
+        if unsupported:
+            lines.extend(["Unsupported or triage execs:", ""])
+            lines.extend(
+                render_generic_rows(
+                    unsupported,
+                    ["Exec Name", "Expression Name", "Action", "Exec Duration", "Exec Stages"],
+                    limit=10,
+                )
+            )
+        stages = app_payload.get("stages", [])
+        if stages:
+            lines.extend(["", "Top qualification stages:", ""])
+            lines.extend(
+                render_generic_rows(
+                    stages,
+                    [
+                        "Stage ID",
+                        "Stage Task Duration",
+                        "Unsupported Task Duration",
+                        "Estimated GPU Speedup",
+                        "Stage Estimated",
+                    ],
+                    limit=10,
+                )
+            )
+        write_operations = app_payload.get("write_operations", [])
+        if write_operations:
+            lines.extend(["", "Write operations:", ""])
+            lines.extend(
+                render_generic_rows(write_operations, list(write_operations[0].keys()), limit=10)
+            )
+        tuning = app_payload.get("tuning_recommendations", [])
+        if tuning:
+            lines.extend(["", "Tuning recommendations excerpt:", ""])
+            lines.extend(f"    {line}" for line in tuning[:20])
+
+    if payload.get("stderr_tail") and payload.get("status") == "failed":
+        lines.extend(["", "RAPIDS stderr tail:", ""])
+        lines.extend(f"    {line}" for line in str(payload["stderr_tail"]).splitlines()[-20:])
+    lines.append("")
+    return lines
+
+
 def render_query_breakdown_table(queries: list[dict[str, Any]]) -> list[str]:
     if not queries:
         return ["No SQL query executions were recorded."]
     lines = [
-        "| Query | Status | Duration | Jobs | Stages | Tasks | Failed Tasks | Retries | Description |",
-        "|---|---|---:|---:|---:|---:|---:|---|---|",
+        "| Query | Status | Duration | Jobs | Stages | Tasks Ended | Unclosed Starts | Failed Tasks | Retries | Description |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---|---|",
     ]
     for query in queries:
         jobs = query.get("jobs", {})
@@ -1801,7 +2499,8 @@ def render_query_breakdown_table(queries: list[dict[str, Any]]) -> list[str]:
         lines.append(
             f"| `{query.get('execution_id')}` | {query.get('status') or 'unknown'} | "
             f"{duration} | {jobs.get('total', 0)} | {stage_text} | "
-            f"{tasks.get('total', 0)} | {tasks.get('failed', 0)} | "
+            f"{tasks.get('total', 0)} | {tasks.get('unclosed_starts', 0)} | "
+            f"{tasks.get('failed', 0)} | "
             f"{retry_text} | {description} |"
         )
     lines.extend(
@@ -1824,7 +2523,10 @@ def render_plan_list(label: str, values: list[str]) -> list[str]:
 def render_stage_table(stages: list[dict[str, Any]], value_kind: str) -> list[str]:
     if not stages:
         return ["No stages recorded."]
-    lines = ["| Stage | Name | Tasks | Failed | Value | GC Ratio |", "|---|---|---:|---:|---:|---:|"]
+    lines = [
+        "| Stage | Name | Started | Ended | Unclosed | Failed | Value | GC Ratio |",
+        "|---|---|---:|---:|---:|---:|---:|---:|",
+    ]
     for stage in stages:
         if value_kind == "spill":
             value = format_bytes(stage["memory_spilled"]["total"] + stage["disk_spilled"]["total"])
@@ -1833,7 +2535,8 @@ def render_stage_table(stages: list[dict[str, Any]], value_kind: str) -> list[st
         name = first_sentence(stage.get("name") or "", 80).replace("|", "\\|")
         lines.append(
             f"| {stage['stage_id']}.{stage['attempt_id']} | {name} | "
-            f"{stage['tasks_seen']} | {stage['failed_tasks']} | {value} | "
+            f"{stage.get('task_starts', 0)} | {stage['tasks_seen']} | "
+            f"{stage.get('unclosed_task_starts', 0)} | {stage['failed_tasks']} | {value} | "
             f"{stage['gc_time_ratio']:.1%} |"
         )
     return lines
@@ -1857,6 +2560,9 @@ def write_index(reports: list[dict[str, Any]], output_dir: Path) -> None:
                 "stages": summary["stages"],
                 "tasks": summary["tasks"],
                 "queries": summary.get("queries", {"total": 0, "failed": 0, "with_retries": 0}),
+                "rapids_qualification": summary.get(
+                    "rapids_qualification", {"status": "not_configured"}
+                ),
             }
         )
 
@@ -1888,15 +2594,19 @@ def render_index_markdown(index: dict[str, Any]) -> str:
 
     lines.extend(
         [
-            "| Application | Source | Mode | Queries | Findings | Plans | Failed Jobs | Failed Tasks |",
-            "|---|---|---|---:|---:|---:|---:|---:|",
+            "| Application | Source | Mode | RAPIDS | GPU Speedup | Queries | Findings | Plans | Failed Jobs | Failed Tasks |",
+            "|---|---|---|---|---:|---:|---:|---:|---:|---:|",
         ]
     )
     for app in index["applications"]:
         name = app.get("app_name") or app.get("app_id") or "unknown"
         source = Path(app["source_file"]).name
+        rapids = app.get("rapids_qualification", {})
+        rapids_text = rapids.get("recommendation") or rapids.get("status") or "not_configured"
+        speedup = rapids.get("estimated_speedup") or ""
         lines.append(
             f"| {name} | `{source}` | `{app.get('analysis_mode') or 'full-file'}` | "
+            f"{rapids_text} | {speedup} | "
             f"{app.get('queries', {}).get('total', 0)} | "
             f"{app['findings']['total']} | "
             f"{app.get('resolution_plan_items', 0)} | "
@@ -1909,11 +2619,13 @@ def render_index_markdown(index: dict[str, Any]) -> str:
 def analyze_all(args: argparse.Namespace) -> list[dict[str, Any]]:
     input_dir = Path(args.input_dir)
     output_dir = Path(args.output_dir)
+    extra_ignored_dirs = [Path(args.rapids_output_dir)]
     logs = (
-        discover_shs_eventlog_dirs(input_dir, output_dir)
+        discover_shs_eventlog_dirs(input_dir, output_dir, extra_ignored_dirs)
         if args.large_shs_mode
-        else discover_logs(input_dir, output_dir)
+        else discover_logs(input_dir, output_dir, extra_ignored_dirs)
     )
+    rapids_context = build_rapids_context(args, logs)
     reports: list[dict[str, Any]] = []
     for log_path in logs:
         if args.large_shs_mode:
@@ -1936,6 +2648,12 @@ def analyze_all(args: argparse.Namespace) -> list[dict[str, Any]]:
                 skew_ratio=args.skew_ratio,
             )
         report = analyzer.analyze()
+        rapids_payload = rapids_payload_for_report(rapids_context, report)
+        if rapids_payload:
+            report["rapids_qualification"] = rapids_payload
+            report["summary"]["rapids_qualification"] = summarize_rapids_for_index(
+                rapids_payload
+            )
         write_report(report, output_dir, log_path)
         reports.append(report)
         summary = report["summary"]
@@ -1955,16 +2673,16 @@ def analyze_all(args: argparse.Namespace) -> list[dict[str, Any]]:
 
 
 def snapshot(
-    input_dir: Path, output_dir: Path, large_shs_mode: bool
+    input_dir: Path, output_dir: Path, large_shs_mode: bool, extra_ignored_dirs: list[Path]
 ) -> dict[str, tuple[int, int]]:
     state: dict[str, tuple[int, int]] = {}
     if large_shs_mode:
-        for directory in discover_shs_eventlog_dirs(input_dir, output_dir):
+        for directory in discover_shs_eventlog_dirs(input_dir, output_dir, extra_ignored_dirs):
             for path in event_files_for(directory):
                 stat = path.stat()
                 state[str(path)] = (stat.st_mtime_ns, stat.st_size)
     else:
-        for path in discover_logs(input_dir, output_dir):
+        for path in discover_logs(input_dir, output_dir, extra_ignored_dirs):
             stat = path.stat()
             state[str(path)] = (stat.st_mtime_ns, stat.st_size)
     return state
@@ -1973,9 +2691,10 @@ def snapshot(
 def watch(args: argparse.Namespace) -> None:
     input_dir = Path(args.input_dir)
     output_dir = Path(args.output_dir)
+    extra_ignored_dirs = [Path(args.rapids_output_dir)]
     previous: dict[str, tuple[int, int]] = {}
     while True:
-        current = snapshot(input_dir, output_dir, args.large_shs_mode)
+        current = snapshot(input_dir, output_dir, args.large_shs_mode, extra_ignored_dirs)
         if current != previous:
             analyze_all(args)
             previous = current
@@ -2048,6 +2767,44 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=to_int(os.getenv("SPARK_EVENT_AGENT_LARGE_SHS_MAX_STAGES"), 50),
         help="Maximum failed/suspect stages to deep-parse in large SHS directory mode.",
+    )
+    parser.add_argument(
+        "--rapids-qualification",
+        action="store_true",
+        default=env_bool("SPARK_EVENT_AGENT_RAPIDS_QUALIFICATION_ENABLED", False),
+        help=(
+            "Run NVIDIA Spark RAPIDS qualification against the discovered event logs "
+            "before writing agent reports."
+        ),
+    )
+    parser.add_argument(
+        "--rapids-platform",
+        default=os.getenv("SPARK_EVENT_AGENT_RAPIDS_QUALIFICATION_PLATFORM", "onprem"),
+        help="Platform value passed to `spark_rapids qualification --platform`.",
+    )
+    parser.add_argument(
+        "--rapids-output-dir",
+        default=os.getenv(
+            "SPARK_EVENT_AGENT_RAPIDS_QUALIFICATION_OUTPUT_DIR",
+            DEFAULT_RAPIDS_OUTPUT_DIR,
+        ),
+        help=(
+            "Directory where RAPIDS qualification output is written or read from. "
+            "If it already contains a RAPIDS run, the latest run is included in reports."
+        ),
+    )
+    parser.add_argument(
+        "--rapids-eventlogs",
+        default=os.getenv("SPARK_EVENT_AGENT_RAPIDS_QUALIFICATION_EVENTLOGS", ""),
+        help=(
+            "Optional explicit eventlogs argument for RAPIDS qualification. "
+            "When omitted, the agent passes the discovered event logs as file:// URIs."
+        ),
+    )
+    parser.add_argument(
+        "--rapids-extra-args",
+        default=os.getenv("SPARK_EVENT_AGENT_RAPIDS_QUALIFICATION_EXTRA_ARGS", ""),
+        help="Additional shell-style arguments appended to `spark_rapids qualification`.",
     )
     return parser.parse_args()
 
