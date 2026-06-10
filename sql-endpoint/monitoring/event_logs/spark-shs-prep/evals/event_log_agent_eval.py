@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import importlib.util
 import json
 import sys
@@ -51,6 +52,15 @@ def write_events(path: Path, events: list[dict[str, Any]]) -> None:
     with path.open("w", encoding="utf-8") as handle:
         for event in events:
             handle.write(json.dumps(event, separators=(",", ":")) + "\n")
+
+
+def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = list(rows[0]) if rows else []
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 def finding_codes(report: dict[str, Any]) -> set[str]:
@@ -439,11 +449,135 @@ def eval_parse_error_data_health(tmpdir: Path) -> dict[str, Any]:
     }
 
 
+def eval_rapids_qualification_output_report(tmpdir: Path) -> dict[str, Any]:
+    source = tmpdir / "rapids-event-log"
+    events = base_events("spark-application-rapids-eval") + [
+        {"Event": "SparkListenerApplicationEnd", "Timestamp": 1710000012000},
+    ]
+    write_events(source, events)
+
+    rapids_run = tmpdir / "_rapids-qualification" / "qual_20260609120000_eval"
+    write_csv(
+        rapids_run / "qualification_summary.csv",
+        [
+            {
+                "App Name": "eval-app",
+                "App ID": "spark-application-rapids-eval",
+                "Recommendation": "Recommended",
+                "Estimated GPU Speedup Category": "Medium",
+                "Estimated GPU Speedup": "2.4",
+                "Potential Problems": "Unsupported write path should be reviewed",
+            }
+        ],
+    )
+    write_csv(
+        rapids_run / "qual_core_output" / "status.csv",
+        [{"App ID": "spark-application-rapids-eval", "Status": "SUCCESS"}],
+    )
+    app_metrics = rapids_run / "qual_core_output" / "qual_metrics" / "spark-application-rapids-eval"
+    write_csv(
+        app_metrics / "execs.csv",
+        [
+            {
+                "SQL ID": "3",
+                "Exec Name": "FileSourceScanExec",
+                "Expression Name": "",
+                "Exec Duration": "10000",
+                "Exec Is Supported": "true",
+                "Action": "NONE",
+                "Exec Stages": "[1]",
+            },
+            {
+                "SQL ID": "3",
+                "Exec Name": "PythonUDF",
+                "Expression Name": "pythonUDF",
+                "Exec Duration": "5000",
+                "Exec Is Supported": "false",
+                "Action": "Triage",
+                "Exec Stages": "[2]",
+            },
+        ],
+    )
+    write_csv(
+        app_metrics / "stages.csv",
+        [
+            {
+                "Stage ID": "2",
+                "Stage Task Duration": "120000",
+                "Unsupported Task Duration": "5000",
+                "Estimated GPU Speedup": "1.8",
+                "Stage Estimated": "false",
+            }
+        ],
+    )
+    raw_metrics = rapids_run / "qual_core_output" / "raw_metrics" / "spark-application-rapids-eval"
+    write_csv(
+        raw_metrics / "write_operations.csv",
+        [{"SQL ID": "3", "Format": "parquet", "Path": "oci://bucket/path"}],
+    )
+    recommendations = (
+        rapids_run
+        / "qual_core_output"
+        / "tuning_apps"
+        / "spark-application-rapids-eval"
+        / "recommendations.log"
+    )
+    recommendations.parent.mkdir(parents=True, exist_ok=True)
+    recommendations.write_text("--conf spark.rapids.sql.enabled=true\n", encoding="utf-8")
+
+    output_dir = tmpdir / "_reports"
+    args = argparse.Namespace(
+        input_dir=str(tmpdir),
+        output_dir=str(output_dir),
+        watch=False,
+        interval=300,
+        max_samples=5000,
+        spill_warn_bytes=1024,
+        gc_warn_ratio=0.10,
+        gc_critical_ratio=0.25,
+        skew_ratio=5.0,
+        large_shs_mode=False,
+        large_shs_max_stages=50,
+        rapids_qualification=False,
+        rapids_platform="onprem",
+        rapids_output_dir=str(tmpdir / "_rapids-qualification"),
+        rapids_eventlogs="",
+        rapids_extra_args="",
+    )
+    reports = AGENT.analyze_all(args)
+    require_equal("report count", len(reports), 1)
+    report = reports[0]
+    rapids = report.get("rapids_qualification", {})
+    require_equal("rapids status", rapids.get("status"), "parsed")
+    require_equal("matched app count", rapids.get("matched_app_count"), 1)
+    require_equal(
+        "rapids recommendation",
+        report["summary"]["rapids_qualification"]["recommendation"],
+        "Recommended",
+    )
+    require_equal(
+        "unsupported exec count",
+        len(
+            rapids["per_app"]["spark-application-rapids-eval"]["unsupported_execs"]
+        ),
+        1,
+    )
+    latest_md = (output_dir / "latest.md").read_text(encoding="utf-8")
+    if "Recommended" not in latest_md:
+        raise AssertionError("RAPIDS recommendation was not rendered in latest.md")
+    return {
+        "rapids_summary": report["summary"]["rapids_qualification"],
+        "matched_apps": rapids["matched_apps"],
+        "per_app_keys": sorted(rapids["per_app"]),
+    }
+
+
 EVALS: list[tuple[str, Callable[[Path], dict[str, Any]]]] = [
     ("full_file_oom_resolution", eval_full_file_oom_resolution),
     ("unclosed_task_starts_write_stall", eval_unclosed_task_starts_write_stall),
     ("large_shs_targeted_deep_parse", eval_large_shs_targeted_deep_parse),
     ("parse_error_data_health", eval_parse_error_data_health),
+    ("rapids_qualification_output_report", eval_rapids_qualification_output_report),
 ]
 
 

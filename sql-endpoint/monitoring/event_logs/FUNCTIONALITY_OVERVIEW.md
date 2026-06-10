@@ -8,14 +8,15 @@ Data Flow workloads. It is designed for environments where Spark event data is
 exported by a Fluent Bit sidecar to OCI Object Storage and must then be made
 available to Spark History Server for inspection.
 
-The solution combines four capabilities in a single containerized workflow:
+The solution combines five capabilities in a single containerized workflow:
 continuous event-log download from OCI Object Storage, event cleansing and
 sanitation for Spark History Server compatibility, Spark UI availability through
-Spark History Server, and automated analysis of common runtime failures with a
-structured resolution plan. The event-log agent focuses on practical root-cause
-signals such as out-of-memory failures, executor loss, shuffle fetch failures,
-high spill, high garbage collection time, skew, and malformed or incomplete log
-data.
+Spark History Server, optional NVIDIA Spark RAPIDS qualification for GPU
+migration assessment or output reporting, and automated analysis of common
+runtime failures with a structured resolution plan. The event-log agent focuses
+on practical root-cause signals such as out-of-memory failures, executor loss,
+shuffle fetch failures, object-store write stalls, high spill, high garbage
+collection time, skew, and malformed or incomplete log data.
 
 ## Functional Scope
 
@@ -29,10 +30,33 @@ The project supports the following primary functions:
 - Spark History Server startup with the prepared event-log directory mounted as
   its log source.
 - Automated event-log analysis with JSON and Markdown reports.
+- Optional NVIDIA Spark RAPIDS qualification of the same CPU event logs, plus
+  parsing of existing qualification output.
 - Large Spark History Server directory analysis through a streaming mode that
   avoids full parsing of every task event when logs are very large.
 - Evaluation fixtures that validate the core diagnosis paths and data-health
   behavior without requiring Spark or OCI.
+
+The Spark RAPIDS CLI is a build-time option, not a mandatory image dependency.
+Default images can parse existing RAPIDS qualification output. Images built with
+`INSTALL_SPARK_RAPIDS_TOOLS=true` can also execute `spark_rapids qualification`
+before the agent writes reports.
+
+## Current Additions
+
+Recent additions focus on large event logs, stalled object-store writes, and GPU
+migration assessment:
+
+- Write-stall triage detects stages with `SparkListenerTaskStart` records that
+  do not have matching `SparkListenerTaskEnd` records and directs operators to
+  confirm blocked executor task threads with live thread dumps.
+- Large SHS mode streams `eventlog_v2_*` directories and deep-parses
+  `SparkListenerTaskEnd` metrics only for failed or signature-bearing stages.
+- RAPIDS qualification context is folded into JSON, Markdown, and index reports
+  when qualification output is available.
+- RAPIDS tools are optional at image build time, keeping the default Spark
+  History Server image smaller while still allowing a RAPIDS-enabled image to
+  execute `spark_rapids qualification`.
 
 ## Schematic Process
 
@@ -63,14 +87,14 @@ Spark event cleansing and sanitation
         v
 /shs-logs/<application-id>
         |
-        +------------------------------+
-        |                              |
-        v                              v
-Spark History Server              Spark Event Log Agent
-http://localhost:18080            /shs-logs/_agent-reports
-        |                              |
-        | Spark UI and REST API        | JSON and Markdown findings
-        v                              v
+        +------------------------------+------------------------------+
+        |                              |                              |
+        v                              v                              v
+Spark History Server              Spark Event Log Agent              RAPIDS Qualification
+http://localhost:18080            /shs-logs/_agent-reports           /shs-logs/_rapids-qualification
+        |                              |                              |
+        | Spark UI and REST API        | JSON and Markdown findings   | GPU migration recommendation
+        v                              v                              v
 Interactive investigation          Root-cause feedback and resolution plan
 ```
 
@@ -170,6 +194,7 @@ The agent evaluates both data-health and runtime-failure signals:
 | Shuffle failures | `FetchFailedException`, missing shuffle blocks, executor death before fetch failure. |
 | Resource pressure | High memory or disk spill, high fetch wait time, task runtime skew, input skew, shuffle-read skew. |
 | Write stalls | Task starts without matching task-end metrics, with guidance to validate object-store or Parquet writer stalls using executor thread dumps. |
+| GPU qualification | RAPIDS recommendation, estimated GPU speedup, unsupported execs/operators, write operations, and tuning recommendation excerpts when qualification output is present. |
 
 The agent also generates a structured resolution plan. A plan can include:
 
@@ -204,6 +229,12 @@ Example query breakdown:
 |---|---|---:|---:|---:|---:|---:|---:|---|---|
 | `42` | failed | 12.5 s | 1 | 1 unique / 2 attempts | 2 | 0 | 1 | yes; stages=1, task_attempts=0 | `select count(*) from eval_table` |
 
+Example RAPIDS qualification excerpt:
+
+| App | Recommendation | Speedup Category | Estimated Speedup | Notes |
+|---|---|---|---:|---|
+| `eval-app` | Recommended | Medium | 2.4 | Unsupported write path should be reviewed |
+
 Example resolution-plan excerpt:
 
 ```text
@@ -232,6 +263,7 @@ Typical outcomes are:
 | `OOMKilled`, exit code `137`, or memory-overhead text in executor removal | Container OOM plan with memory-overhead and concurrency recommendations | Resize executor memory overhead, reduce executor cores, or use more smaller executors. |
 | `FetchFailedException` after executor loss | Shuffle-recovery plan that treats fetch failure as a symptom | Fix executor loss first, then rerun and verify missing shuffle blocks disappear. |
 | Task starts without task ends in a write stage | Write-stall triage plan with executor thread-dump patterns | Confirm whether tasks are blocked in object-store metadata/write paths, then reduce final write fanout with `coalesce` or `repartition`. |
+| RAPIDS qualification output for the same CPU event logs | RAPIDS section in the app report and index with recommendation, estimated speedup, unsupported execs, write operations, and tuning excerpts | Use GPU migration guidance for compute-heavy stages, while separately addressing object-store write stalls and unsupported operations. |
 | High spill, high fetch wait, or skewed task metrics | Resource-pressure plan with partitioning and skew-handling recommendations | Increase or rebalance partitions, reduce row width, handle hot keys, and validate lower spill/fetch wait. |
 | Large `eventlog_v2_*` directory with many task events | Large SHS streaming report with targeted failed-stage metrics | Obtain practical root-cause feedback without parsing every task event in the application. |
 
@@ -258,6 +290,8 @@ The project provides the following operational benefits:
   event data before UI loading.
 - Direct Spark UI availability for detailed investigation.
 - Automated first-pass triage for common Spark incidents.
+- Optional RAPIDS qualification context in the same reports used for failure
+  triage.
 - Resolution plans that distinguish symptoms from likely root cause, especially
   fetch failures that follow executor loss.
 - Large-directory analysis mode for practical handling of high-volume Spark
@@ -280,6 +314,11 @@ The workflow also has limitations and operating considerations:
 - Spark event logs do not always include every artifact needed for definitive
   diagnosis. Executor stdout, stderr, Kubernetes pod events, and the final SQL
   physical plan may still be needed for high-confidence remediation.
+- RAPIDS qualification estimates GPU migration opportunity from CPU event logs;
+  it does not resolve object-store write stalls or unsupported operators by
+  itself.
+- Running RAPIDS qualification inside the container requires a RAPIDS-enabled
+  image build; otherwise only existing qualification output is parsed.
 - OCI authentication, network connectivity, and bucket permissions must be
   configured correctly before the downloader can operate continuously.
 - Spark History Server resource sizing must match the number and size of

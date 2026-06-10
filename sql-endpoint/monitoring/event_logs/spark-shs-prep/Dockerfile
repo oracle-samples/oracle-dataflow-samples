@@ -81,10 +81,30 @@ ENV PATH="${SPARK_HOME}/bin:${SPARK_HOME}/sbin:${PATH}"
 COPY --from=oci-installer /opt/oci-venv /opt/oci-venv
 RUN ln -sf /opt/oci-venv/bin/oci /usr/local/bin/oci
 
+# ── NVIDIA Spark RAPIDS user tools ────────────────────────────
+# Set INSTALL_SPARK_RAPIDS_TOOLS=true to install `spark_rapids qualification`
+# into the image. The event-log agent can still parse existing RAPIDS output
+# when the CLI is not installed.
+ARG INSTALL_SPARK_RAPIDS_TOOLS=false
+ARG SPARK_RAPIDS_USER_TOOLS_VERSION=""
+RUN if [ "$INSTALL_SPARK_RAPIDS_TOOLS" = "true" ]; then \
+      python3 -m venv /opt/rapids-venv \
+      && /opt/rapids-venv/bin/pip install --no-cache-dir --upgrade pip \
+      && if [ -n "$SPARK_RAPIDS_USER_TOOLS_VERSION" ]; then \
+           /opt/rapids-venv/bin/pip install --no-cache-dir "spark-rapids-user-tools==${SPARK_RAPIDS_USER_TOOLS_VERSION}"; \
+         else \
+           /opt/rapids-venv/bin/pip install --no-cache-dir spark-rapids-user-tools; \
+         fi \
+      && ln -sf /opt/rapids-venv/bin/spark_rapids /usr/local/bin/spark_rapids; \
+    else \
+      echo "Skipping NVIDIA Spark RAPIDS user tools install"; \
+    fi
+
 # ── Verify everything works at build time ─────────────────────
 RUN java -version \
  && python3 --version \
  && oci --version \
+ && if [ "$INSTALL_SPARK_RAPIDS_TOOLS" = "true" ]; then test -x /usr/local/bin/spark_rapids; fi \
  && ps --version
 
 # ── Scripts ───────────────────────────────────────────────────
@@ -139,6 +159,11 @@ ENV SPARK_EVENT_AGENT_SPILL_WARN_BYTES="1073741824"
 ENV SPARK_EVENT_AGENT_GC_WARN_RATIO="0.10"
 ENV SPARK_EVENT_AGENT_GC_CRITICAL_RATIO="0.25"
 ENV SPARK_EVENT_AGENT_SKEW_RATIO="5.0"
+ENV SPARK_EVENT_AGENT_RAPIDS_QUALIFICATION_ENABLED="false"
+ENV SPARK_EVENT_AGENT_RAPIDS_QUALIFICATION_PLATFORM="onprem"
+ENV SPARK_EVENT_AGENT_RAPIDS_QUALIFICATION_OUTPUT_DIR="/shs-logs/_rapids-qualification"
+ENV SPARK_EVENT_AGENT_RAPIDS_QUALIFICATION_EVENTLOGS=""
+ENV SPARK_EVENT_AGENT_RAPIDS_QUALIFICATION_EXTRA_ARGS=""
 
 ENV SHS_PORT="18080"
 ENV SHS_MAX_APPLICATIONS="500"
