@@ -13,13 +13,15 @@ Licensed under the Universal Permissive License v 1.0 as shown at https://oss.or
 - Read access to Spark JSON-lines event logs, either normalized files or Spark History Server `eventlog_v2_*` directories.
 - Write access to the report directory, for example `/shs-logs/_agent-reports` in the container or `/tmp/spark-history-agent-reports` locally.
 - Docker or Podman is required only for the full OCI downloader + repair + agent + Spark History Server image.
+- NVIDIA Spark RAPIDS user tools are optional. The default image can parse existing qualification output; running qualification inside the container requires a RAPIDS-enabled image build.
 - OCI namespace, bucket, region, and an OCI auth method are required only when downloading event logs from OCI Object Storage.
 
 A single Docker image that:
 1. Downloads Spark event logs from **OCI Object Storage** (as shipped by Fluent Bit)
 2. Decompresses, repairs, sanitizes, and merges them into SHS-compatible plain-text files
 3. Runs a **Spark Event Log Agent** that checks the normalized logs for failures and resource-pressure signatures
-4. Starts the **Spark History Server** — UI available at `http://localhost:18080`
+4. Optionally runs **NVIDIA Spark RAPIDS qualification** when built with RAPIDS tools, or parses existing RAPIDS output into reports
+5. Starts the **Spark History Server** — UI available at `http://localhost:18080`
 
 ---
 
@@ -43,6 +45,9 @@ OCI Bucket (.log.gz / .lz4)
         ▼
    /shs-logs/<app-id>    ← plain text, no extension
         │
+        ├── optionally: spark_rapids qualification
+        │                 [requires RAPIDS-enabled build]
+        │                 → /shs-logs/_rapids-qualification
         ▼
    Spark Event Log Agent → /shs-logs/_agent-reports/*.report.{json,md}
         │
@@ -72,10 +77,65 @@ cat shs-logs/_agent-reports/latest.md
 
 ---
 
+## Current additions
+
+- **Write-stall triage:** reports flag stages with `SparkListenerTaskStart`
+  records that do not have matching `SparkListenerTaskEnd` records, then point
+  operators at executor thread-dump patterns for object-store and Parquet writer
+  stalls.
+- **Large SHS mode:** the agent can stream `eventlog_v2_*` Spark History Server
+  directories and deep-parse task metrics only for failed or signature-bearing
+  stages.
+- **RAPIDS qualification reporting:** reports can include NVIDIA Spark RAPIDS
+  recommendations, estimated GPU speedup, unsupported operators, write
+  operations, and tuning excerpts.
+- **Optional RAPIDS image dependency:** the default container image remains
+  smaller and does not install RAPIDS tools; use `INSTALL_SPARK_RAPIDS_TOOLS=true`
+  only when the container should execute `spark_rapids qualification`.
+
+---
+
+## Container build options
+
+The default image does not install NVIDIA Spark RAPIDS user tools. The event-log
+agent can still parse an existing RAPIDS qualification output directory when
+`SPARK_EVENT_AGENT_RAPIDS_QUALIFICATION_OUTPUT_DIR` points at it.
+
+To run `spark_rapids qualification` from inside this container, build with:
+
+```bash
+INSTALL_SPARK_RAPIDS_TOOLS=true docker compose build
+```
+
+Then enable runtime execution through `.env` or the shell:
+
+```bash
+SPARK_EVENT_AGENT_RAPIDS_QUALIFICATION_ENABLED=true docker compose up
+```
+
+You can pin the Python package version when needed:
+
+```bash
+INSTALL_SPARK_RAPIDS_TOOLS=true \
+SPARK_RAPIDS_USER_TOOLS_VERSION=26.4.5 \
+docker compose build
+```
+
+The direct Docker or Podman build equivalent is:
+
+```bash
+docker build \
+  --build-arg INSTALL_SPARK_RAPIDS_TOOLS=true \
+  -t spark-shs-oci:rapids \
+  spark-shs-prep
+```
+
+---
+
 ## Run with docker directly
 
 ```bash
-docker build -t spark-shs-oci:latest .
+docker build -t spark-shs-oci:latest spark-shs-prep
 
 docker run -d \
   --name spark-history-server \
@@ -148,6 +208,16 @@ The repair step incorporates the same behavior as the local `fix_spark_event_log
 | `SPARK_EVENT_AGENT_GC_WARN_RATIO` | `0.10` | GC time share warning threshold |
 | `SPARK_EVENT_AGENT_GC_CRITICAL_RATIO` | `0.25` | GC time share high-severity threshold |
 | `SPARK_EVENT_AGENT_SKEW_RATIO` | `5.0` | Max-to-median skew threshold |
+| `SPARK_EVENT_AGENT_RAPIDS_QUALIFICATION_ENABLED` | `false` | Run `spark_rapids qualification` before writing reports |
+| `SPARK_EVENT_AGENT_RAPIDS_QUALIFICATION_PLATFORM` | `onprem` | Platform passed to RAPIDS qualification |
+| `SPARK_EVENT_AGENT_RAPIDS_QUALIFICATION_OUTPUT_DIR` | `/shs-logs/_rapids-qualification` | RAPIDS output directory; existing latest run is parsed even when execution is disabled |
+| `SPARK_EVENT_AGENT_RAPIDS_QUALIFICATION_EVENTLOGS` | *(auto)* | Optional explicit RAPIDS `--eventlogs` value; defaults to discovered event logs as `file://` URIs |
+| `SPARK_EVENT_AGENT_RAPIDS_QUALIFICATION_EXTRA_ARGS` | *(empty)* | Extra shell-style arguments appended to `spark_rapids qualification` |
+
+Running qualification inside the container requires an image built with
+`INSTALL_SPARK_RAPIDS_TOOLS=true`. Without that build arg, the runtime
+qualification step reports that `spark_rapids` is unavailable, but the agent
+still parses existing RAPIDS output in the configured output directory.
 
 The agent reads the normalized files in `/shs-logs` and writes:
 
@@ -158,7 +228,22 @@ The agent reads the normalized files in `/shs-logs` and writes:
 | `/shs-logs/_agent-reports/<app>.report.json` | Detailed application report |
 | `/shs-logs/_agent-reports/<app>.report.md` | Human-readable application findings |
 
-Current checks include failed jobs/stages/tasks, executor-loss and fetch-failure signatures, JVM/container/direct-memory OOM signatures, high spill, high GC time, high fetch wait, and task/input/shuffle skew. Reports include a per-query breakdown with job, stage, task, duration, and retry evidence when Spark SQL execution metadata is present, plus a structured resolution plan. Data-health plans are emitted first when parse errors, missing events, or incomplete logs mean the SHS input should be fixed before application tuning.
+Current checks include failed jobs/stages/tasks, task starts without matching task-end metrics, executor-loss and fetch-failure signatures, JVM/container/direct-memory OOM signatures, high spill, high GC time, high fetch wait, and task/input/shuffle skew. Reports include a per-query breakdown with job, stage, task, duration, and retry evidence when Spark SQL execution metadata is present, plus a structured resolution plan. When RAPIDS qualification output is available, reports add a RAPIDS section with the matched app recommendation, estimated speedup, unsupported execs/operators, stage details, write operations, and tuning recommendation excerpts. Data-health plans are emitted first when parse errors, missing events, or incomplete logs mean the SHS input should be fixed before application tuning.
+
+Example run with RAPIDS qualification enabled:
+
+```bash
+python3 spark-shs-prep/scripts/analyze_event_logs.py \
+  --input-dir /Users/mmiola/Downloads/spark_history \
+  --output-dir /tmp/spark-history-agent-reports \
+  --rapids-qualification \
+  --rapids-platform onprem \
+  --rapids-output-dir /tmp/rapids-qualification
+```
+
+If RAPIDS has already been run, omit `--rapids-qualification` and point `--rapids-output-dir` at the existing output directory. The agent parses the newest qualification run it finds.
+
+When a full event log contains many `SparkListenerTaskStart` records without matching `SparkListenerTaskEnd` records, the agent emits `TASK_STARTS_WITHOUT_ENDS` and a `write-stall-triage` plan. This does not prove an object-store stall by itself. It tells operators to collect live executor thread dumps and look for Spark task threads blocked in OCI Object Storage or Parquet output paths such as `ObjectStorageClient.headObject`, `BmcDataStore.getFileStatus`, `BmcFilesystemImpl.create`, `HadoopOutputFile.create`, or `ParquetOutputWriter`. If confirmed, reduce final write fanout with `coalesce(N)` or `repartition(N)` before `write.parquet(...)`, target fewer larger files, and avoid allowing hundreds or thousands of concurrent writers to hit Object Storage metadata APIs.
 
 Large SHS directory mode is intended for already-downloaded Spark History Server directories such as `eventlog_v2_spark-application-*`. It scans all `events_*` files in numeric order, parses only app/job/stage/executor/SQL/signature-bearing events first, then deep-parses `SparkListenerTaskEnd` metrics only for failed or signature-bearing stages. This keeps OOM and executor-loss root-cause analysis practical on very large SHS trees. In this mode, report task totals are the targeted failed/suspect-stage task totals, not full-application task totals.
 
@@ -180,8 +265,10 @@ python3 spark-shs-prep/evals/event_log_agent_eval.py
 The eval runner is dependency-free and creates temporary Spark event-log fixtures for:
 
 - normalized OOM plus fetch-after-executor-loss resolution plans
+- unclosed task starts with write-stall triage guidance
 - large SHS directory mode with targeted failed-stage `TaskEnd` parsing
 - malformed event-log data-health findings
+- RAPIDS qualification output attached to JSON, Markdown, and index reports
 
 ### Spark History Server
 
@@ -219,47 +306,6 @@ curl http://localhost:18080/api/v1/applications/<appId>/executors
 # Environment (Spark config used)
 curl http://localhost:18080/api/v1/applications/<appId>/environment
 ```
-
----
-
-## Codex troubleshooting plugin
-
-This sample includes a Codex plugin for diagnosing Spark OOM, executor loss, `FetchFailedException`, broadcast, shuffle, AQE, and `memoryOverhead` issues from Data Flow event logs and Spark History Server output.
-
-Plugin files:
-
-```text
-.agents/plugins/marketplace.json
-plugins/dataflow-spark-oom-troubleshooter/
-```
-
-From this directory, add the repository-local marketplace to Codex:
-
-```bash
-codex plugin marketplace add "$(pwd)"
-```
-
-Then install or enable the `dataflow-spark-oom-troubleshooter` plugin in Codex. In a new Codex session, ask for the skill explicitly or describe the Spark incident:
-
-```text
-Use $dataflow-spark-oom-troubleshooter to diagnose this Data Flow Spark OOM.
-```
-
-Useful inputs for the skill include:
-
-- Physical plan output from Spark SQL or DataFrame execution.
-- Spark History Server REST output for applications, stages, executors, and environment.
-- Driver and executor logs around the failed stage or killed executor.
-- Cluster sizing and Spark configs such as executor memory, `spark.executor.memoryOverhead`, executor cores, shuffle partitions, AQE, and broadcast thresholds.
-
-The plugin also includes a standalone triage helper:
-
-```bash
-python3 plugins/dataflow-spark-oom-troubleshooter/skills/dataflow-spark-oom-troubleshooter/scripts/analyze_spark_oom.py \
-  plan.txt driver.log executor.log
-```
-
-The script flags common signatures such as Kubernetes `OOMKilled` / exit 137, `FetchFailedException` caused by executor loss, large broadcast exchanges, `explode(arrays_zip(...))`, low shuffle partition counts, and AQE coalesced shuffle reads.
 
 ---
 
