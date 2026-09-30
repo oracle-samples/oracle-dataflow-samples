@@ -3,6 +3,7 @@ import datetime as dt
 import gzip
 import io
 import json
+import sys
 import types
 import unittest
 from unittest import mock
@@ -123,6 +124,167 @@ class HelperTests(unittest.TestCase):
                 app.choose_oci_auth("auto", "/missing/config"),
                 "resource-principal",
             )
+
+
+class AuthenticationTests(unittest.TestCase):
+    def test_auto_mode_detects_client_credentials(self):
+        with mock.patch.dict(
+            app.os.environ,
+            {
+                "SF_CLIENT_ID": "consumer-key",
+                "SF_CLIENT_SECRET": "client-secret",
+            },
+            clear=True,
+        ):
+            self.assertEqual(
+                app.resolve_salesforce_auth_mode(),
+                "client-credentials",
+            )
+
+    def test_cli_oauth_values_override_environment(self):
+        args = app.cli_parser().parse_args(
+            [
+                "check-salesforce",
+                "--sf-auth-mode",
+                "client-credentials",
+                "--sf-domain",
+                "example.my",
+                "--sf-client-id",
+                "consumer-key",
+                "--sf-client-secret-ocid",
+                "ocid1.vaultsecret.oc1..example",
+                "--sf-vault-oci-auth",
+                "resource-principal",
+            ]
+        )
+        with mock.patch.dict(app.os.environ, {}, clear=True):
+            app.configure_salesforce_environment(args)
+            self.assertEqual(
+                app.os.environ["SF_AUTH_MODE"],
+                "client-credentials",
+            )
+            self.assertEqual(
+                app.os.environ["SF_DOMAIN"],
+                "example.my",
+            )
+            self.assertEqual(
+                app.os.environ["SF_CLIENT_ID"],
+                "consumer-key",
+            )
+            self.assertEqual(
+                app.os.environ["SF_CLIENT_SECRET_OCID"],
+                "ocid1.vaultsecret.oc1..example",
+            )
+            self.assertEqual(
+                app.os.environ["SF_VAULT_OCI_AUTH"],
+                "resource-principal",
+            )
+
+    def test_auto_mode_rejects_ambiguous_credentials(self):
+        with mock.patch.dict(
+            app.os.environ,
+            {
+                "SF_CLIENT_ID": "consumer-key",
+                "SF_CLIENT_SECRET": "client-secret",
+                "SF_ACCESS_TOKEN": "access-token",
+                "SF_INSTANCE_URL": "https://example.my.salesforce.com",
+            },
+            clear=True,
+        ):
+            with self.assertRaisesRegex(
+                app.UsageError,
+                "Multiple Salesforce authentication methods",
+            ):
+                app.resolve_salesforce_auth_mode()
+
+    def test_client_credentials_builds_refreshable_salesforce_client(self):
+        captured = {}
+        module = types.ModuleType("simple_salesforce")
+
+        def salesforce_factory(**kwargs):
+            captured.update(kwargs)
+            return types.SimpleNamespace(
+                sf_instance="example.my.salesforce.com"
+            )
+
+        module.Salesforce = salesforce_factory
+        with (
+            mock.patch.dict(
+                app.os.environ,
+                {
+                    "SF_AUTH_MODE": "client-credentials",
+                    "SF_CLIENT_ID": "consumer-key",
+                    "SF_CLIENT_SECRET": "client-secret",
+                    "SF_DOMAIN": "example.my",
+                },
+                clear=True,
+            ),
+            mock.patch.dict(
+                sys.modules,
+                {"simple_salesforce": module},
+            ),
+            mock.patch.object(
+                app,
+                "build_requests_session",
+                return_value=object(),
+            ),
+        ):
+            client = app.build_salesforce_client((10.0, 30.0))
+
+        self.assertEqual(captured["consumer_key"], "consumer-key")
+        self.assertEqual(captured["consumer_secret"], "client-secret")
+        self.assertEqual(captured["domain"], "example.my")
+        self.assertNotIn("session_id", captured)
+        self.assertEqual(
+            client._sample_auth_mode,
+            "client-credentials",
+        )
+
+    def test_vault_secret_is_decoded_without_logging_value(self):
+        encoded = app.base64.b64encode(b"client-secret\n").decode("ascii")
+        get_secret_bundle = mock.Mock(
+            return_value=types.SimpleNamespace(
+                data=types.SimpleNamespace(
+                    secret_bundle_content=types.SimpleNamespace(
+                        content=encoded
+                    )
+                )
+            )
+        )
+        client = types.SimpleNamespace(get_secret_bundle=get_secret_bundle)
+        with (
+            mock.patch.dict(app.os.environ, {}, clear=True),
+            mock.patch.object(
+                app,
+                "build_oci_secrets_client",
+                return_value=(FAKE_OCI, client, "config"),
+            ),
+        ):
+            value = app.read_oci_vault_secret(
+                "ocid1.vaultsecret.oc1..example"
+            )
+
+        self.assertEqual(value, "client-secret")
+        get_secret_bundle.assert_called_once_with(
+            secret_id="ocid1.vaultsecret.oc1..example",
+            stage="CURRENT",
+            retry_strategy=FAKE_OCI.retry.DEFAULT_RETRY_STRATEGY,
+        )
+
+    def test_client_credentials_rejects_two_secret_sources(self):
+        with mock.patch.dict(
+            app.os.environ,
+            {
+                "SF_CLIENT_SECRET": "direct-secret",
+                "SF_CLIENT_SECRET_OCID": "ocid1.vaultsecret.oc1..example",
+            },
+            clear=True,
+        ):
+            with self.assertRaisesRegex(
+                app.UsageError,
+                "Set only one",
+            ):
+                app.resolve_client_secret()
 
 
 class CommandTests(unittest.TestCase):

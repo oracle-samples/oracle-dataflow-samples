@@ -4,12 +4,26 @@
 
 Check:
 
-- the integration username and password;
+- that exactly one authentication method is configured, or `SF_AUTH_MODE` is
+  explicitly set;
+- for Client Credentials, that the External Client App flow is enabled, the
+  integration user is assigned, and the consumer key and secret are current;
+- when using Vault, that `SF_CLIENT_SECRET_OCID` is a secret OCID and the OCI
+  principal can read its `CURRENT` secret bundle;
+- for static-token mode, that both `SF_ACCESS_TOKEN` and `SF_INSTANCE_URL` are
+  set and the token has not expired;
+- for password authentication, that the integration username, password, and
+  security token are correct;
 - whether the security token changed after a password reset;
-- `SF_DOMAIN=test` for a sandbox;
-- the My Domain value, if the organization requires it;
-- whether the user has API access; and
+- `SF_DOMAIN=test` for a sandbox, or the correct My Domain prefix;
+- whether the user has the `API Enabled` permission; and
 - whether login IP restrictions require a security token or trusted network.
+
+The username/password/security-token method uses Salesforce SOAP `login()`.
+Leave `SF_API_VERSION` unset or use an organization-supported version no higher
+than `64.0`. Newer organizations can have this login method disabled, and it can
+require `Use Any API Auth`. Ask the Salesforce administrator to enable the
+required access or use OAuth instead.
 
 Do not paste credentials into a support ticket or shared log.
 

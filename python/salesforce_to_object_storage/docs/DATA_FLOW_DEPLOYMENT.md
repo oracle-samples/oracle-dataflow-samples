@@ -59,10 +59,20 @@ bucket. Oracle's policy builder includes the template “Let Data Flow resource
 use Object Storage.” The exact policy must be reviewed by the customer's IAM
 administrator and scoped to the customer's compartment and bucket.
 
-If Salesforce credentials are stored in OCI Vault, the resource principal also
-needs narrowly scoped permission to read the specific secret bundle. Credential
-retrieval should be integrated with the customer's approved secret-injection
-mechanism before production use.
+Store the External Client App's consumer secret as the plain content of one OCI
+Vault secret. The script retrieves the API's Base64 representation and decodes
+it in memory. Grant the Data Flow resource principal read access to only that
+secret bundle. For a dynamic group containing the approved Data Flow runs, a
+policy can be restricted by secret OCID:
+
+```text
+Allow dynamic-group <data-flow-dynamic-group> to read secret-bundles in
+compartment <vault-compartment> where
+target.secret.id='<client-secret-ocid>'
+```
+
+The customer's IAM administrator must review the dynamic-group rule, identity
+domain syntax, compartment, and condition before creating the policy.
 
 ## 5. Create the Data Flow application
 
@@ -73,10 +83,22 @@ Create a Python/PySpark application with:
 - the Spark/Python runtime used to build the archive; and
 - application arguments beginning with the `export` command.
 
-Example arguments:
+Data Flow does not support setting arbitrary environment variables for a job.
+Use application parameters for the non-secret OAuth values and Vault secret
+OCID. Example arguments:
 
 ```text
 export
+--sf-auth-mode
+client-credentials
+--sf-domain
+acme.my
+--sf-client-id
+${SalesforceClientId}
+--sf-client-secret-ocid
+${SalesforceClientSecretOcid}
+--sf-vault-oci-auth
+resource-principal
 --object
 Account
 --fields
@@ -93,7 +115,9 @@ resource-principal
 json
 ```
 
-Do not place Salesforce passwords or tokens in visible application arguments.
+Do not place a Salesforce client secret, password, access token, or security
+token in visible application arguments. The consumer key and Vault secret OCID
+identify resources but do not reveal the secret value.
 
 ## 6. Validate the first run
 

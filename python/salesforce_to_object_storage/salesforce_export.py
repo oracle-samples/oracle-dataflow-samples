@@ -9,6 +9,8 @@ and ``--dry-run`` remain useful while troubleshooting an installation.
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import datetime as dt
 import gzip
 import hashlib
@@ -25,7 +27,7 @@ from typing import Any, BinaryIO, Iterable, Mapping, Sequence
 from urllib.parse import unquote, urlparse
 
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 FIELD_PATH = re.compile(
     r"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$"
@@ -228,6 +230,167 @@ def build_requests_session(timeout: tuple[float, float]) -> Any:
     return session
 
 
+SALESFORCE_AUTH_ENVIRONMENT = {
+    "client-credentials": (
+        "SF_CLIENT_ID",
+        "SF_CLIENT_SECRET",
+        "SF_CLIENT_SECRET_OCID",
+    ),
+    "access-token": ("SF_ACCESS_TOKEN", "SF_INSTANCE_URL"),
+    "password": ("SF_USERNAME", "SF_PASSWORD", "SF_SECURITY_TOKEN"),
+}
+
+
+def resolve_salesforce_auth_mode() -> str:
+    requested = os.environ.get("SF_AUTH_MODE", "auto").strip().lower()
+    supported = ("auto", *SALESFORCE_AUTH_ENVIRONMENT)
+    if requested not in supported:
+        raise UsageError(
+            "Unsupported SF_AUTH_MODE. Choose auto, client-credentials, "
+            "access-token, or password."
+        )
+    if requested != "auto":
+        return requested
+
+    configured = [
+        mode
+        for mode, names in SALESFORCE_AUTH_ENVIRONMENT.items()
+        if any(os.environ.get(name) for name in names)
+    ]
+    if len(configured) == 1:
+        return configured[0]
+    if len(configured) > 1:
+        raise UsageError(
+            "Multiple Salesforce authentication methods are configured: "
+            + ", ".join(configured)
+            + ". Set SF_AUTH_MODE explicitly or unset the unused variables."
+        )
+    raise UsageError(
+        "No Salesforce authentication method is configured. Copy .env.example "
+        "to .env and follow the README."
+    )
+
+
+def required_environment(names: Sequence[str], auth_mode: str) -> dict[str, str]:
+    missing = [name for name in names if not os.environ.get(name)]
+    if missing:
+        raise UsageError(
+            f"Missing environment variables for {auth_mode}: "
+            + ", ".join(missing)
+            + ". Copy .env.example to .env and follow the README."
+        )
+    return {name: os.environ[name] for name in names}
+
+
+def salesforce_domain() -> str:
+    domain = os.environ.get("SF_DOMAIN", "login").strip()
+    if not domain or "://" in domain or "/" in domain:
+        raise UsageError(
+            "SF_DOMAIN must be a host prefix such as login, test, or acme.my; "
+            "do not provide a URL."
+        )
+    if domain.endswith(".salesforce.com"):
+        raise UsageError(
+            "SF_DOMAIN must omit .salesforce.com; use acme.my rather than "
+            "acme.my.salesforce.com."
+        )
+    return domain
+
+
+def build_oci_secrets_client(
+    auth_mode: str,
+    config_file: str,
+    profile: str,
+) -> tuple[Any, Any, str]:
+    try:
+        import oci
+    except ModuleNotFoundError as exc:
+        raise UsageError(
+            "The OCI Python SDK is required to read SF_CLIENT_SECRET_OCID. "
+            "Activate the virtual environment and run: "
+            "pip install -r requirements.txt"
+        ) from exc
+
+    effective_auth = choose_oci_auth(auth_mode, config_file)
+    if effective_auth == "resource-principal":
+        signer = oci.auth.signers.get_resource_principals_signer()
+        client = oci.secrets.SecretsClient({}, signer=signer)
+    elif effective_auth == "instance-principal":
+        signer = oci.auth.signers.InstancePrincipalsSecurityTokenSigner()
+        client = oci.secrets.SecretsClient({}, signer=signer)
+    elif effective_auth == "config":
+        config = oci.config.from_file(
+            file_location=str(Path(config_file).expanduser()),
+            profile_name=profile,
+        )
+        client = oci.secrets.SecretsClient(config)
+    else:
+        raise UsageError(f"Unsupported SF_VAULT_OCI_AUTH: {effective_auth}")
+    return oci, client, effective_auth
+
+
+def read_oci_vault_secret(secret_id: str) -> str:
+    if not secret_id.startswith("ocid1.vaultsecret."):
+        raise UsageError(
+            "SF_CLIENT_SECRET_OCID must be an OCI Vault secret OCID."
+        )
+    auth_mode = os.environ.get("SF_VAULT_OCI_AUTH", "auto")
+    config_file = os.environ.get(
+        "SF_VAULT_OCI_CONFIG_FILE",
+        os.environ.get("OCI_CONFIG_FILE", "~/.oci/config"),
+    )
+    profile = os.environ.get(
+        "SF_VAULT_OCI_PROFILE",
+        os.environ.get("OCI_CONFIG_PROFILE", "DEFAULT"),
+    )
+    oci_module, client, _ = build_oci_secrets_client(
+        auth_mode,
+        config_file,
+        profile,
+    )
+    response = client.get_secret_bundle(
+        secret_id=secret_id,
+        stage="CURRENT",
+        retry_strategy=oci_module.retry.DEFAULT_RETRY_STRATEGY,
+    )
+    encoded = getattr(
+        getattr(response.data, "secret_bundle_content", None),
+        "content",
+        None,
+    )
+    if not encoded:
+        raise UsageError(
+            "The OCI Vault secret has no readable CURRENT Base64 content."
+        )
+    try:
+        decoded = base64.b64decode(encoded, validate=True).decode("utf-8")
+    except (binascii.Error, UnicodeDecodeError, ValueError) as exc:
+        raise UsageError(
+            "The OCI Vault secret content is not valid Base64-encoded UTF-8."
+        ) from exc
+    value = decoded.rstrip("\r\n")
+    if not value:
+        raise UsageError("The OCI Vault client secret is empty.")
+    return value
+
+
+def resolve_client_secret() -> str:
+    direct = os.environ.get("SF_CLIENT_SECRET")
+    secret_id = os.environ.get("SF_CLIENT_SECRET_OCID")
+    if direct and secret_id:
+        raise UsageError(
+            "Set only one of SF_CLIENT_SECRET or SF_CLIENT_SECRET_OCID."
+        )
+    if direct:
+        return direct
+    if secret_id:
+        return read_oci_vault_secret(secret_id)
+    raise UsageError(
+        "Client Credentials authentication requires SF_CLIENT_SECRET or "
+        "SF_CLIENT_SECRET_OCID."
+    )
+
+
 def build_salesforce_client(timeout: tuple[float, float]) -> Any:
     try:
         from simple_salesforce import Salesforce
@@ -244,30 +407,40 @@ def build_salesforce_client(timeout: tuple[float, float]) -> Any:
     if os.environ.get("SF_API_VERSION"):
         common["version"] = os.environ["SF_API_VERSION"]
 
-    token = os.environ.get("SF_ACCESS_TOKEN")
-    instance_url = os.environ.get("SF_INSTANCE_URL")
-    if token or instance_url:
-        if not token or not instance_url:
-            raise UsageError(
-                "Set SF_ACCESS_TOKEN and SF_INSTANCE_URL together, or unset both."
-            )
-        return Salesforce(session_id=token, instance_url=instance_url, **common)
-
-    required = ("SF_USERNAME", "SF_PASSWORD", "SF_SECURITY_TOKEN")
-    missing = [name for name in required if not os.environ.get(name)]
-    if missing:
-        raise UsageError(
-            "Missing Salesforce environment variables: " + ", ".join(missing) + ". "
-            "Copy .env.example to .env and follow the README."
+    auth_mode = resolve_salesforce_auth_mode()
+    if auth_mode == "client-credentials":
+        values = required_environment(("SF_CLIENT_ID",), auth_mode)
+        client = Salesforce(
+            consumer_key=values["SF_CLIENT_ID"],
+            consumer_secret=resolve_client_secret(),
+            domain=salesforce_domain(),
+            **common,
         )
-    if os.environ.get("SF_DOMAIN"):
-        common["domain"] = os.environ["SF_DOMAIN"]
-    return Salesforce(
-        username=os.environ["SF_USERNAME"],
-        password=os.environ["SF_PASSWORD"],
-        security_token=os.environ["SF_SECURITY_TOKEN"],
-        **common,
-    )
+    elif auth_mode == "access-token":
+        values = required_environment(
+            ("SF_ACCESS_TOKEN", "SF_INSTANCE_URL"),
+            auth_mode,
+        )
+        client = Salesforce(
+            session_id=values["SF_ACCESS_TOKEN"],
+            instance_url=values["SF_INSTANCE_URL"],
+            **common,
+        )
+    else:
+        values = required_environment(
+            ("SF_USERNAME", "SF_PASSWORD", "SF_SECURITY_TOKEN"),
+            auth_mode,
+        )
+        client = Salesforce(
+            username=values["SF_USERNAME"],
+            password=values["SF_PASSWORD"],
+            security_token=values["SF_SECURITY_TOKEN"],
+            domain=salesforce_domain(),
+            **common,
+        )
+
+    setattr(client, "_sample_auth_mode", auth_mode)
+    return client
 
 
 def describe_object(sf: Any, object_name: str) -> Mapping[str, Any]:
@@ -489,6 +662,61 @@ class OciJsonlSink:
             self._spool = None
 
 
+def add_salesforce_auth_arguments(command: argparse.ArgumentParser) -> None:
+    group = command.add_argument_group("Salesforce authentication")
+    group.add_argument(
+        "--sf-auth-mode",
+        choices=("auto", "client-credentials", "access-token", "password"),
+        help="override SF_AUTH_MODE",
+    )
+    group.add_argument(
+        "--sf-domain",
+        help="Salesforce host prefix, such as login, test, or acme.my",
+    )
+    group.add_argument(
+        "--sf-client-id",
+        help="OAuth consumer key; this value is not the client secret",
+    )
+    group.add_argument(
+        "--sf-client-secret-ocid",
+        help="OCI Vault secret OCID containing the OAuth client secret",
+    )
+    group.add_argument(
+        "--sf-api-version",
+        help='Salesforce API version without a leading "v"',
+    )
+    group.add_argument(
+        "--sf-vault-oci-auth",
+        choices=("auto", "resource-principal", "instance-principal", "config"),
+        help="OCI authentication used to read the Vault secret",
+    )
+    group.add_argument(
+        "--sf-vault-oci-config-file",
+        help="OCI SDK configuration file used to read the Vault secret",
+    )
+    group.add_argument(
+        "--sf-vault-oci-profile",
+        help="OCI SDK profile used to read the Vault secret",
+    )
+
+
+def configure_salesforce_environment(args: argparse.Namespace) -> None:
+    mappings = {
+        "sf_auth_mode": "SF_AUTH_MODE",
+        "sf_domain": "SF_DOMAIN",
+        "sf_client_id": "SF_CLIENT_ID",
+        "sf_client_secret_ocid": "SF_CLIENT_SECRET_OCID",
+        "sf_api_version": "SF_API_VERSION",
+        "sf_vault_oci_auth": "SF_VAULT_OCI_AUTH",
+        "sf_vault_oci_config_file": "SF_VAULT_OCI_CONFIG_FILE",
+        "sf_vault_oci_profile": "SF_VAULT_OCI_PROFILE",
+    }
+    for argument, environment_name in mappings.items():
+        value = getattr(args, argument, None)
+        if value is not None:
+            os.environ[environment_name] = value
+
+
 def add_oci_auth_arguments(command: argparse.ArgumentParser) -> None:
     group = command.add_argument_group("OCI authentication")
     group.add_argument(
@@ -533,6 +761,7 @@ def cli_parser() -> argparse.ArgumentParser:
     check_sf.add_argument("--object", default="Account", help="sObject API name")
     check_sf.add_argument("--timeout", type=float, default=30.0)
     check_sf.add_argument("--json", action="store_true", help="print JSON output")
+    add_salesforce_auth_arguments(check_sf)
 
     fields = commands.add_parser(
         "list-fields",
@@ -542,6 +771,7 @@ def cli_parser() -> argparse.ArgumentParser:
     fields.add_argument("--object", required=True, help="sObject API name")
     fields.add_argument("--format", choices=("table", "json"), default="table")
     fields.add_argument("--timeout", type=float, default=30.0)
+    add_salesforce_auth_arguments(fields)
 
     check_oci = commands.add_parser(
         "check-oci",
@@ -620,11 +850,13 @@ def cli_parser() -> argparse.ArgumentParser:
     advanced.add_argument("--spool-memory-mib", type=int, default=16)
     advanced.add_argument("--connect-timeout", type=float, default=10.0)
     advanced.add_argument("--read-timeout", type=float, default=120.0)
+    add_salesforce_auth_arguments(export)
     add_oci_auth_arguments(export)
     return parser
 
 
 def command_check_salesforce(args: argparse.Namespace) -> int:
+    configure_salesforce_environment(args)
     if args.timeout <= 0:
         raise UsageError("--timeout must be positive.")
     object_name = checked_identifier(args.object, "object name")
@@ -633,6 +865,7 @@ def command_check_salesforce(args: argparse.Namespace) -> int:
     result = sf.query(f"SELECT Id FROM {object_name} LIMIT 1")
     summary: dict[str, Any] = {
         "status": "ok",
+        "authentication": getattr(sf, "_sample_auth_mode", "unknown"),
         "salesforce_instance": sf.sf_instance,
         "object": object_name,
         "readable_field_count": len(description.get("fields", [])),
@@ -651,6 +884,7 @@ def command_check_salesforce(args: argparse.Namespace) -> int:
         print(json.dumps(summary, indent=2, sort_keys=True))
     else:
         print("Salesforce connection: OK")
+        print(f"  Authentication: {summary['authentication']}")
         print(f"  Instance: {summary['salesforce_instance']}")
         print(f"  Object: {object_name}")
         print(f"  Readable fields: {summary['readable_field_count']}")
@@ -665,6 +899,7 @@ def command_check_salesforce(args: argparse.Namespace) -> int:
 
 
 def command_list_fields(args: argparse.Namespace) -> int:
+    configure_salesforce_environment(args)
     if args.timeout <= 0:
         raise UsageError("--timeout must be positive.")
     sf = build_salesforce_client((min(10.0, args.timeout), args.timeout))
@@ -774,6 +1009,7 @@ def resolve_export_query(
 
 
 def command_export(args: argparse.Namespace) -> int:
+    configure_salesforce_environment(args)
     for name in ("partition_rows", "spool_memory_mib"):
         if getattr(args, name) <= 0:
             raise UsageError(f"--{name.replace('_', '-')} must be positive.")
@@ -825,6 +1061,7 @@ def command_export(args: argparse.Namespace) -> int:
         dataset=dataset,
         run_id=run_id,
         query_sha256=query_hash,
+        salesforce_auth=getattr(sf, "_sample_auth_mode", "unknown"),
         oci_auth=effective_auth,
     )
     sink = OciJsonlSink(
@@ -880,8 +1117,9 @@ def safe_runtime_error(exc: Exception) -> str:
     name = type(exc).__name__
     if name == "SalesforceAuthenticationFailed":
         return (
-            "Salesforce authentication failed. Check the username, password, "
-            "security token, SF_DOMAIN, and whether API access is enabled."
+            "Salesforce authentication failed. Check SF_AUTH_MODE, SF_DOMAIN, "
+            "the selected credentials or External Client App, the integration "
+            "user assignment, and whether API access is enabled."
         )
     if name in {"ConnectionError", "ConnectTimeout", "ReadTimeout", "SSLError"}:
         return (
@@ -899,7 +1137,8 @@ def safe_runtime_error(exc: Exception) -> str:
         request_id = getattr(exc, "request_id", "unknown")
         return (
             f"OCI request failed (status={status}, code={code}, "
-            f"request_id={request_id}). Check IAM policy, region, namespace, and bucket."
+            f"request_id={request_id}). Check IAM policy, region, and the configured "
+            "Vault secret or Object Storage destination."
         )
     return f"Operation failed ({name}). Re-run with --debug for troubleshooting."
 

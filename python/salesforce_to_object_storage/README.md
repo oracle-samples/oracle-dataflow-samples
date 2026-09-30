@@ -44,14 +44,107 @@ Use these four commands in order:
 
 - Python 3.11 is recommended.
 - HTTPS egress on port 443 to the Salesforce login/My Domain endpoint.
-- A Salesforce integration user with API access and read permission for the
-  required objects and fields.
+- A Salesforce integration user with the `API Enabled` permission and read
+  permission for the required objects and fields.
 - An existing OCI Object Storage bucket.
 - OCI credentials in Cloud Shell, an instance principal on a VM, or a Data
   Flow resource principal.
 
 Salesforce field-level security applies. A field that is not visible to the
 integration user cannot be extracted by this sample.
+
+## Salesforce authentication
+
+The `SF_*` names below are this sample's configuration interface; they are not
+environment-variable names defined by Salesforce. `SF_AUTH_MODE=auto` is the
+default and works when exactly one method is configured. Set the mode
+explicitly in shared environments.
+
+### Method 1: OAuth Client Credentials (recommended)
+
+Ask the Salesforce administrator to create an External Client App, enable the
+OAuth Client Credentials flow, assign its run-as integration user, and grant
+that user only the required API, object, and field permissions.
+
+For a short Cloud Shell or VM test, provide the consumer key and secret through
+a protected `.env` file:
+
+```bash
+export SF_AUTH_MODE='client-credentials'
+export SF_CLIENT_ID='replace-with-consumer-key'
+export SF_CLIENT_SECRET='replace-with-consumer-secret'
+export SF_DOMAIN='acme.my'
+```
+
+`SF_DOMAIN` is a prefix, not a URL. A My Domain is recommended for this flow.
+The script passes these credentials to the pinned `simple-salesforce` library,
+which obtains an access token and automatically obtains a new one after
+Salesforce returns `INVALID_SESSION_ID`. The access token stays in process
+memory and is not written to disk, Object Storage, OCI Vault, or logs.
+
+For a VM or Data Flow deployment, store only the client secret in OCI Vault and
+replace `SF_CLIENT_SECRET` with:
+
+```bash
+unset SF_CLIENT_SECRET
+export SF_CLIENT_SECRET_OCID='ocid1.vaultsecret.oc1...'
+export SF_VAULT_OCI_AUTH='resource-principal'
+```
+
+`SF_VAULT_OCI_AUTH=auto` is the default. It selects a Data Flow resource
+principal, then an OCI SDK configuration file when one exists, and otherwise
+an instance principal. The script reads the Vault secret version marked
+`CURRENT`; it never prints the decoded value.
+
+### Method 2: existing OAuth access token
+
+Use this compatibility mode when another approved component owns token
+acquisition and renewal:
+
+```bash
+export SF_AUTH_MODE='access-token'
+export SF_ACCESS_TOKEN='replace-with-oauth-access-token'
+export SF_INSTANCE_URL='https://acme.my.salesforce.com'
+```
+
+This mode cannot refresh an expired token. Both variables are required.
+
+### Method 3: username, password, and security token (legacy test path)
+
+This method is convenient for a short-lived connectivity test when the
+Salesforce administrator permits SOAP API login:
+
+```bash
+export SF_AUTH_MODE='password'
+export SF_USERNAME='integration-user@example.com'
+export SF_PASSWORD='replace-with-password'
+export SF_SECURITY_TOKEN='replace-with-security-token'
+export SF_DOMAIN='login'
+```
+
+`SF_PASSWORD` must contain only the password. Do not append the security token;
+the pinned `simple-salesforce` library combines the two values internally.
+
+`SF_DOMAIN` is the host prefix used by Client Credentials and password
+authentication:
+
+| Salesforce login URL | `SF_DOMAIN` |
+|---|---|
+| `https://login.salesforce.com` | `login` (default) |
+| `https://test.salesforce.com` | `test` |
+| `https://acme.my.salesforce.com` | `acme.my` |
+| `https://acme--uat.sandbox.my.salesforce.com` | `acme--uat.sandbox.my` |
+
+Salesforce is retiring the SOAP `login()` call used by the password method. It
+is available only through API version 64.0, may be disabled in newer
+organizations, and can require the `Use Any API Auth` permission.
+
+### Optional API version
+
+`SF_API_VERSION` is optional and must omit the leading `v`. For OAuth, choose a
+REST API version supported by the organization. For password authentication,
+leave it unset (the pinned library defaults to `59.0`) or use an
+organization-supported version no higher than `64.0`.
 
 ## 1. Test from OCI Cloud Shell
 
@@ -90,6 +183,7 @@ Expected output resembles:
 
 ```text
 Salesforce connection: OK
+  Authentication: client-credentials
   Instance: acme.my.salesforce.com
   Object: Account
   Readable fields: 68
