@@ -1,0 +1,10 @@
+SELECT
+    Id,
+    Name,
+    Owner.Id,
+    Owner.Name,
+    BillingCountry,
+    SystemModstamp
+FROM Account
+WHERE SystemModstamp >= 2026-09-30T00:00:00Z
+  AND SystemModstamp < 2026-10-01T00:00:00Z
