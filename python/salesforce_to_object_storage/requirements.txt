@@ -1,0 +1,2 @@
+oci==2.187.1
+simple-salesforce==1.12.10

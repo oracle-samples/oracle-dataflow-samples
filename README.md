@@ -34,6 +34,7 @@ You must have Set Up Your Tenancy and be able to Access Data Flow
 | Structured Streaming Kafka Word Count |This Structured Streaming application shows how to read Kafka stream and calculate word frequencies over one minute window interval|[Structured Kafka Word Count](./python/structured_streaming_kafka_word_count)| [Structured Kafka Word Count](./java/structured_streaming_kafka_word_count)||
 | Random Forest Regression |This application shows how to build a model and make prediction using Random Forest Regression.                                                             |[Random Forest Regression](./python/random_forest_regression)|
 | Oracle NoSQL Database cloud service |This application shows how to interface with Oracle NoSQL Database cloud service.                                                             |[Oracle NoSQL Database cloud service](./python/oracle_nosql)|
+| Salesforce to OCI Object Storage | Extract Salesforce objects or SOQL query results into immutable, gzip-compressed JSON Lines files in OCI Object Storage. |[Salesforce to OCI Object Storage](./python/salesforce_to_object_storage)|||
 
 For step-by-step instructions, see the README files included with each sample.
 
